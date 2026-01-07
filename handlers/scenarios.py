@@ -4,7 +4,6 @@ from aiogram.fsm.state import State, StatesGroup
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.crud import create_session
-from services.llm import LLMService
 from config.prompts import SCENARIOS
 
 
@@ -42,10 +41,12 @@ async def handle_scenario_callback(
     )
     
     # Загружаем system_prompt из SCENARIOS
-    system_prompt = SCENARIOS[scenario_key]
+    system_prompt = SCENARIOS[scenario_key]["system_prompt"]
+    
+    # Получаем LLM сервис из bot data
+    llm_service = callback.bot.get("llm_service")
     
     # Вызываем LLMService.generate_response с пустым messages=[]
-    llm_service = LLMService()
     ai_response = await llm_service.generate_response(
         system_prompt=system_prompt,
         messages=[]
@@ -57,8 +58,11 @@ async def handle_scenario_callback(
     # Устанавливаем FSM state = "in_dialog"
     await state.set_state(DialogStates.in_dialog)
     
-    # Сохраняем session_id в FSM state data
-    await state.update_data(session_id=db_session.id)
+    # Сохраняем session_id и system_prompt в FSM state data
+    await state.update_data(
+        session_id=db_session.id,
+        system_prompt=system_prompt
+    )
     
     # Подтверждаем callback
     await callback.answer()

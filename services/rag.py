@@ -40,7 +40,7 @@ class RAGService:
             logger.error(f"Ошибка при инициализации коллекции: {e}")
             raise
     
-    def load_knowledge_base(self, folder_path: str):
+    async def load_knowledge_base(self, folder_path: str):
         """
         Загружает документы из указанной папки в базу знаний.
         
@@ -125,7 +125,7 @@ class RAGService:
         else:
             logger.warning(f"Не найдено документов для загрузки в папке: {folder_path}")
     
-    def search(self, query: str, top_k: int = 3) -> list[str]:
+    async def search(self, query: str, top_k: int = 3) -> list[str]:
         """
         Выполняет поиск релевантных фрагментов по запросу.
         

@@ -7,15 +7,9 @@ from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.crud import add_message, get_session_messages, update_session
-from services.llm import LLMService
-from services.rag import RAGService
 from config.settings import MAX_MESSAGE_LENGTH
 
 logger = logging.getLogger(__name__)
-
-# Инициализация сервисов
-llm_service = LLMService()
-rag_service = RAGService()
 
 # Ключевые фразы для завершения диалога
 FINISH_PHRASES = [
@@ -63,6 +57,11 @@ async def handle_message(message: types.Message, state: FSMContext, session: Asy
             return
         
         logger.info(f"Обработка сообщения от пользователя {message.from_user.id}, session_id={session_id}")
+        
+        # Получаем сервисы из bot data
+        bot_data = message.bot
+        rag_service = bot_data.get("rag_service")
+        llm_service = bot_data.get("llm_service")
         
         # Сохраняем сообщение пользователя в БД
         await add_message(

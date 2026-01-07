@@ -12,36 +12,33 @@ logger = logging.getLogger(__name__)
 class JudgeService:
     """Сервис для оценки сессий психологического консультирования."""
     
-    def __init__(self, llm_service: LLMService):
+    def __init__(self):
         """
         Инициализация сервиса оценки.
-        
-        Args:
-            llm_service: Сервис для работы с LLM
         """
-        self.llm_service = llm_service
+        self.llm_service = LLMService()
     
-    async def evaluate_session(self, session_id: int, db_session: AsyncSession) -> dict:
+    async def evaluate_session(self, db_session: AsyncSession, session_id: int) -> dict:
         """
         Оценка сессии консультирования.
         
         Args:
-            session_id: ID сессии для оценки
             db_session: Асинхронная сессия БД
+            session_id: ID сессии для оценки
             
         Returns:
             dict: Результат оценки с полями score, good_points, mistakes, recommendations
         """
         try:
             # Получаем все сообщения сессии
-            msgs = await get_session_messages(session_id, db_session)
+            msgs = await get_session_messages(db_session, session_id)
             
             if not msgs:
                 logger.warning(f"Сессия {session_id} не содержит сообщений")
                 return self._get_default_evaluation()
             
-            # Формируем историю диалога для LLM
-            messages = [{"role": msg.role, "content": msg.content} for msg in msgs]
+            # Сообщения уже в формате для LLM
+            messages = msgs
             
             # Вызываем LLM для оценки с системным промптом судьи
             response = await self.llm_service.generate_response(
@@ -66,12 +63,12 @@ class JudgeService:
             
             # Сохраняем оценку в БД
             evaluation = await create_evaluation(
+                session=db_session,
                 session_id=session_id,
                 score=score,
                 good_points=good_points,
                 mistakes=mistakes,
-                recommendations=recommendations,
-                db=db_session
+                recommendations=recommendations
             )
             
             # Возвращаем результат

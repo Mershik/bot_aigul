@@ -2,8 +2,6 @@ from aiogram import types
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 from database.crud import update_session
-from services.judge import JudgeService
-from services.sheets import SheetsService
 from config.settings import ADMIN_IDS
 from datetime import datetime
 import logging
@@ -42,8 +40,12 @@ async def handle_finish(
             await message.answer("❌ Ошибка при завершении диалога")
             return
         
+        # Получаем сервисы из bot data
+        judge_service = message.bot.get("judge_service")
+        sheets_service = message.bot.get("sheets_service")
+        
         # Оцениваем сессию через JudgeService
-        evaluation = await JudgeService.evaluate_session(session, session_id)
+        evaluation = await judge_service.evaluate_session(session, session_id)
         
         # Отправляем сообщение сотруднику
         await message.answer("✅ Диалог завершен! Результаты отправлены руководителю.")
@@ -119,7 +121,7 @@ async def handle_finish(
         
         # Записываем в Google Sheets
         try:
-            await SheetsService.write_session_result(
+            await sheets_service.write_session_result(
                 session_id=session_id,
                 username=username,
                 date=date,

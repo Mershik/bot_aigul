@@ -41,12 +41,12 @@ async def get_user_by_telegram_id(
 async def create_session(
     session: AsyncSession,
     user_id: int,
-    scenario_id: int
+    scenario: str
 ) -> Session:
     """Создать новую сессию."""
     new_session = Session(
         user_id=user_id,
-        scenario_id=scenario_id,
+        scenario_id=1,  # TODO: Получить scenario_id из базы по имени сценария
         status="active",
         started_at=datetime.utcnow(),
         messages_count=0
@@ -109,15 +109,27 @@ async def add_message(
 
 async def get_session_messages(
     session: AsyncSession,
-    session_id: int
-) -> List[Message]:
-    """Получить все сообщения сессии."""
-    result = await session.execute(
+    session_id: int,
+    limit: Optional[int] = None
+) -> List[dict]:
+    """Получить сообщения сессии в формате для LLM."""
+    query = (
         select(Message)
         .where(Message.session_id == session_id)
-        .order_by(Message.timestamp)
+        .order_by(Message.timestamp.desc())
     )
-    return list(result.scalars().all())
+    
+    if limit:
+        query = query.limit(limit)
+    
+    result = await session.execute(query)
+    messages = list(result.scalars().all())
+    
+    # Возвращаем в обратном порядке (от старых к новым) и в формате для LLM
+    return [
+        {"role": msg.role, "content": msg.content}
+        for msg in reversed(messages)
+    ]
 
 
 async def create_evaluation(

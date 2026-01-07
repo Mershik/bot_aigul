@@ -84,3 +84,55 @@ class SheetsService:
                 f"Данные: {data}"
             )
             # Не пробрасываем исключение, чтобы не прерывать работу бота
+    
+    async def write_session_result(
+        self,
+        session_id: int,
+        username: str,
+        date: str,
+        scenario: str,
+        duration_minutes: int,
+        message_count: int,
+        score: int,
+        strengths: list,
+        mistakes: list,
+        recommendations: str
+    ):
+        """
+        Записывает результаты сессии в Google Sheets.
+        
+        Args:
+            session_id: ID сессии
+            username: Имя пользователя
+            date: Дата сессии
+            scenario: Название сценария
+            duration_minutes: Длительность в минутах
+            message_count: Количество сообщений
+            score: Оценка
+            strengths: Список сильных сторон
+            mistakes: Список ошибок
+            recommendations: Рекомендации
+        """
+        try:
+            # Формируем строку данных
+            row = [
+                str(session_id),
+                username,
+                date,
+                scenario,
+                str(duration_minutes),
+                str(message_count),
+                str(score),
+                ", ".join(strengths) if strengths else "",
+                ", ".join(mistakes) if mistakes else "",
+                recommendations
+            ]
+            
+            # Добавляем строку в конец таблицы
+            self.worksheet.append_row(row)
+            
+            logger.info(f"Результаты сессии {session_id} успешно записаны в Google Sheets")
+            
+        except Exception as e:
+            logger.error(f"Ошибка при записи результатов сессии {session_id} в Google Sheets: {e}")
+            # Не пробрасываем исключение, чтобы не прерывать работу бота

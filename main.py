@@ -4,8 +4,6 @@ from pathlib import Path
 
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
 
 from config.settings import BOT_TOKEN, DATABASE_URL
 from database import init_db
@@ -49,16 +47,10 @@ async def main():
     storage = MemoryStorage()
     dp = Dispatcher(storage=storage)
     
-    # Создание async engine для PostgreSQL
-    engine = create_async_engine(DATABASE_URL, echo=False)
-    async_session = sessionmaker(
-        engine, class_=AsyncSession, expire_on_commit=False
-    )
-    
     try:
         # Инициализация базы данных
         logger.info("Инициализация базы данных...")
-        await init_db(engine)
+        async_session = await init_db(DATABASE_URL)
         
         # Инициализация сервисов
         logger.info("Инициализация сервисов...")
@@ -83,12 +75,11 @@ async def main():
         dp["llm_service"] = llm_service
         dp["judge_service"] = judge_service
         dp["sheets_service"] = sheets_service
-        dp["engine"] = engine
         
         # Подключение middlewares
         logger.info("Подключение middlewares...")
-        dp.message.middleware(AuthMiddleware(async_session))
-        dp.callback_query.middleware(AuthMiddleware(async_session))
+        dp.message.middleware(AuthMiddleware())
+        dp.callback_query.middleware(AuthMiddleware())
         dp.message.middleware(RateLimitMiddleware())
         dp.callback_query.middleware(RateLimitMiddleware())
         
@@ -122,7 +113,6 @@ async def main():
         # Graceful shutdown
         logger.info("Остановка бота...")
         await bot.session.close()
-        await engine.dispose()
         logger.info("Бот остановлен")
 
 
