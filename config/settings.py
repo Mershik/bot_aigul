@@ -29,5 +29,7 @@ MAX_MESSAGE_LENGTH = int(os.getenv("MAX_MESSAGE_LENGTH", "500"))
 # Validate
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN не задан в .env")
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL не задан в .env")
 if not OPENROUTER_API_KEY:
     raise ValueError("OPENROUTER_API_KEY не задан в .env")

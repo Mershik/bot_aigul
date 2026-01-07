@@ -13,7 +13,8 @@ alembic==1.13.1
 # ChromaDB требует numpy<2.0
 numpy==1.26.4
 chromadb==0.4.22
-sentence-transformers==2.3.1
+sentence-transformers==2.5.1
+transformers==4.38.2
 
 # LLM API
 openai==1.10.0
