@@ -1,48 +1,41 @@
-from typing import Callable, Dict, Any, Awaitable
+from typing import Callable, Dict, Any, Awaitable, Union
 from aiogram import BaseMiddleware
-from aiogram.types import Message, Update
+from aiogram.types import Message, CallbackQuery, TelegramObject
 
 from config.settings import WHITELIST_EMPLOYEES, ADMIN_IDS
-
 
 class AuthMiddleware(BaseMiddleware):
     """
     Middleware для проверки whitelist пользователей.
-    Разрешает доступ только пользователям из WHITELIST_EMPLOYEES и ADMIN_IDS.
+    Подходит для aiogram 3.x
     """
 
     async def __call__(
         self,
-        handler: Callable[[Update, Dict[str, Any]], Awaitable[Any]],
-        event: Update,
+        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
+        event: Union[Message, CallbackQuery],
         data: Dict[str, Any]
     ) -> Any:
-        # Получаем telegram_id пользователя
-        user = None
-        if event.message:
-            user = event.message.from_user
-        elif event.callback_query:
-            user = event.callback_query.from_user
+        # В aiogram 3.x 'event' — это сразу Message или CallbackQuery
+        # У обоих этих типов есть атрибут from_user
+        user = getattr(event, "from_user", None)
         
         if user is None:
-            # Если не удалось получить пользователя, пропускаем событие
+            # Если не удалось получить пользователя, пропускаем дальше
             return await handler(event, data)
         
         telegram_id = user.id
         
-        # Объединяем whitelist и admin списки
-        allowed_users = set(WHITELIST_EMPLOYEES + ADMIN_IDS)
+        # Объединяем whitelist и admin списки (превращаем в числа на случай, если в .env строки)
+        allowed_users = {int(uid) for uid in (WHITELIST_EMPLOYEES + ADMIN_IDS)}
         
-        # Проверяем, есть ли пользователь в whitelist
+        # Проверяем доступ
         if telegram_id not in allowed_users:
-            # Отправляем сообщение об отказе в доступе
-            if event.message:
-                await event.message.answer("⛔ Доступ запрещен")
-            elif event.callback_query:
-                await event.callback_query.answer("⛔ Доступ запрещен", show_alert=True)
-            
-            # Прекращаем обработку
-            return
+            if isinstance(event, Message):
+                await event.answer("⛔ Доступ запрещен")
+            elif isinstance(event, CallbackQuery):
+                await event.answer("⛔ Доступ запрещен", show_alert=True)
+            return  # Прекращаем выполнение
         
-        # Пользователь в whitelist, продолжаем обработку
+        # Если всё ок, идем к обработчику
         return await handler(event, data)
