@@ -3,6 +3,7 @@ import logging
 from pathlib import Path
 
 from aiogram import Bot, Dispatcher
+from aiogram.filters import Command
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from config.settings import BOT_TOKEN, DATABASE_URL
@@ -87,7 +88,7 @@ async def main():
         logger.info("Регистрация обработчиков...")
         
         # /start команда
-        dp.message.register(handlers.start.handle_start, commands=["start"])
+        dp.message.register(handlers.start.handle_start, Command("start"))
         
         # callback для сценариев
         dp.callback_query.register(
@@ -96,7 +97,7 @@ async def main():
         )
         
         # /finish команда
-        dp.message.register(handlers.finish.handle_finish, commands=["finish"])
+        dp.message.register(handlers.finish.handle_finish, Command("finish"))
         
         # Обработчик всех текстовых сообщений (должен быть последним)
         dp.message.register(handlers.chat.handle_message)
