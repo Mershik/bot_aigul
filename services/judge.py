@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.llm import LLMService
@@ -50,13 +51,24 @@ class JudgeService:
             try:
                 # Очистка текста от Markdown блоков и лишних пробелов
                 res_text = response.strip()
-                if res_text.startswith("```json"):
-                    res_text = res_text[7:]
-                if res_text.endswith("```"):
-                    res_text = res_text[:-3]
-                res_text = res_text.strip()
                 
-                evaluation_data = json.loads(res_text)
+                # Пытаемся найти JSON с помощью регулярного выражения, если он обернут в текст
+                json_match = re.search(r'(\{.*\})', res_text, re.DOTALL)
+                if json_match:
+                    res_text = json_match.group(1)
+                else:
+                    # Если регулярка не сработала, пробуем старый метод очистки
+                    if res_text.startswith("```json"):
+                        res_text = res_text[7:]
+                    if res_text.endswith("```"):
+                        res_text = res_text[:-3]
+                    res_text = res_text.strip()
+                
+                try:
+                    evaluation_data = json.loads(res_text)
+                except json.JSONDecodeError:
+                    logger.error(f"Не удалось распарсить JSON даже после очистки. Ответ: {response}")
+                    return self._get_default_evaluation()
                 
                 # Валидация структуры ответа
                 score = evaluation_data.get("score", 5)

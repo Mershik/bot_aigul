@@ -167,11 +167,12 @@ async def finish_session(
                 return
 
             # Обновляем статус сессии в БД
+            now = datetime.utcnow()
             await update_session(
                 session,
                 session_id,
                 status="completed",
-                finished_at=datetime.utcnow()
+                finished_at=now
             )
             
             # После коммита в update_session объект может стать expired.
@@ -181,6 +182,9 @@ async def finish_session(
             if not updated_session:
                 logger.error(f"Не удалось получить сессию {session_id} после обновления")
                 return
+            
+            # Принудительно обновляем объект, чтобы Python увидел записанные данные
+            await session.refresh(updated_session)
 
             logger.info(f"Сессия {session_id} успешно обновлена в БД (status=completed)")
 
@@ -193,9 +197,13 @@ async def finish_session(
 
                 # Подготовка данных для Google Sheets
                 username = message.from_user.username or message.from_user.full_name
-                date = updated_session.finished_at.strftime("%d.%m.%Y %H:%M")
+                
+                # Защита от NoneType для finished_at
+                finish_time = updated_session.finished_at or now
+                date = finish_time.strftime("%d.%m.%Y %H:%M")
+                
                 scenario_name = updated_session.scenario.name if updated_session.scenario else "Неизвестно"
-                duration = updated_session.finished_at - updated_session.started_at
+                duration = finish_time - updated_session.started_at
                 minutes = int(duration.total_seconds() / 60)
                 message_count = len(updated_session.messages)
 
