@@ -25,7 +25,9 @@ async def handle_message(
     state: FSMContext,
     session_factory,
     rag_service,
-    llm_service
+    llm_service,
+    judge_service,
+    sheets_service
 ) -> None:
     """
     Обработка сообщений пользователя в активном диалоге
@@ -36,6 +38,8 @@ async def handle_message(
         session_factory: Фабрика для создания сессий БД
         rag_service: Сервис для поиска в базе знаний
         llm_service: Сервис для генерации ответов LLM
+        judge_service: Сервис для оценки сессий
+        sheets_service: Сервис для записи в Google Sheets
     """
     async with session_factory() as session:
         try:
@@ -111,7 +115,14 @@ async def handle_message(
             response_lower = response.lower()
             if any(phrase in response_lower for phrase in FINISH_PHRASES):
                 logger.info(f"Обнаружена ключевая фраза завершения в ответе для session_id={session_id}")
-                await finish_session(message, state, session_factory, session_id)
+                await finish_session(
+                    message,
+                    state,
+                    session_factory,
+                    session_id,
+                    judge_service,
+                    sheets_service
+                )
         
         except Exception as e:
             logger.error(f"Ошибка при обработке сообщения от пользователя {message.from_user.id}: {e}", exc_info=True)
@@ -120,7 +131,14 @@ async def handle_message(
             )
 
 
-async def finish_session(message: types.Message, state: FSMContext, session_factory, session_id: int):
+async def finish_session(
+    message: types.Message,
+    state: FSMContext,
+    session_factory,
+    session_id: int,
+    judge_service,
+    sheets_service
+):
     """
     Завершение сессии диалога
     
@@ -129,11 +147,54 @@ async def finish_session(message: types.Message, state: FSMContext, session_fact
         state: Контекст состояния FSM
         session_factory: Фабрика для создания сессий БД
         session_id: ID сессии для завершения
+        judge_service: Сервис для оценки сессий
+        sheets_service: Сервис для записи в Google Sheets
     """
     async with session_factory() as session:
         try:
+            from datetime import datetime
             # Обновляем статус сессии в БД
-            await update_session(session, session_id, status="completed")
+            updated_session = await update_session(
+                session,
+                session_id,
+                status="completed",
+                finished_at=datetime.utcnow()
+            )
+            
+            if not updated_session:
+                logger.error(f"Не удалось обновить сессию {session_id} при завершении")
+                return
+
+            logger.info(f"Сессия {session_id} успешно обновлена в БД (status=completed)")
+
+            # Оцениваем сессию через JudgeService
+            logger.info(f"Запуск оценки сессии {session_id}...")
+            evaluation = await judge_service.evaluate_session(session, session_id)
+            logger.info(f"Оценка сессии {session_id} завершена: score={evaluation.get('score')}")
+
+            # Подготовка данных для Google Sheets
+            username = message.from_user.username or message.from_user.full_name
+            date = updated_session.finished_at.strftime("%d.%m.%Y %H:%M")
+            scenario_name = updated_session.scenario.name if updated_session.scenario else "Неизвестно"
+            duration = updated_session.finished_at - updated_session.started_at
+            minutes = int(duration.total_seconds() / 60)
+            message_count = len(updated_session.messages)
+
+            # Записываем в Google Sheets
+            logger.info(f"Отправка результатов сессии {session_id} в Google Sheets...")
+            await sheets_service.write_session_result(
+                session_id=session_id,
+                username=username,
+                date=date,
+                scenario=scenario_name,
+                duration_minutes=minutes,
+                message_count=message_count,
+                score=evaluation.get("score", 0),
+                strengths=evaluation.get("strengths", []),
+                mistakes=evaluation.get("mistakes", []),
+                recommendations=evaluation.get("recommendations", "Нет рекомендаций")
+            )
+            logger.info(f"Результаты сессии {session_id} успешно отправлены в Google Sheets")
             
             # Очищаем состояние FSM
             await state.clear()
@@ -142,7 +203,7 @@ async def finish_session(message: types.Message, state: FSMContext, session_fact
             
             # Отправляем прощальное сообщение
             await message.answer(
-                "✅ Диалог завершен. Спасибо за обращение!\n"
+                "✅ Диалог завершен. Результаты тренировки сохранены.\n"
                 "Для начала нового диалога используйте /start"
             )
         
