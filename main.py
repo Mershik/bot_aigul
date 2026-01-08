@@ -2,8 +2,8 @@ import asyncio
 import logging
 from pathlib import Path
 
-from aiogram import Bot, Dispatcher
-from aiogram.filters import Command
+from aiogram import Bot, Dispatcher, F
+from aiogram.filters import Command, StateFilter
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from config.settings import BOT_TOKEN, DATABASE_URL
@@ -106,8 +106,12 @@ async def main():
         # /finish команда
         dp.message.register(handlers.finish.handle_finish, Command("finish"))
         
-        # Обработчик всех текстовых сообщений (должен быть последним)
-        dp.message.register(handlers.chat.handle_message)
+        # Обработчик текстовых сообщений в диалоге (должен быть последним)
+        dp.message.register(
+            handlers.chat.handle_message,
+            StateFilter(handlers.scenarios.DialogStates.in_dialog),
+            F.text
+        )
         
         logger.info("Бот успешно запущен и готов к работе")
         

@@ -7,6 +7,7 @@ from aiogram.fsm.context import FSMContext
 
 from database.crud import add_message, get_session_messages, update_session
 from config.settings import MAX_MESSAGE_LENGTH
+from handlers.scenarios import DialogStates
 
 logger = logging.getLogger(__name__)
 
@@ -42,8 +43,8 @@ async def handle_message(
             current_state = await state.get_state()
             
             # Проверяем, что пользователь находится в диалоге
-            if current_state != "in_dialog":
-                logger.debug(f"Сообщение проигнорировано: пользователь {message.from_user.id} не в диалоге")
+            if current_state != DialogStates.in_dialog.state:
+                logger.debug(f"Сообщение проигнорировано: пользователь {message.from_user.id} не в диалоге (текущее состояние: {current_state})")
                 return
             
             # Проверяем длину сообщения

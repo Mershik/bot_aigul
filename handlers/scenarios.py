@@ -1,11 +1,14 @@
+import logging
 from aiogram import types
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from sqlalchemy import select
 
-from database.crud import create_session, get_user_by_telegram_id
+from database.crud import create_session, get_user_by_telegram_id, add_message
 from database.models import User
 from config.prompts import SCENARIOS
+
+logger = logging.getLogger(__name__)
 
 
 class DialogStates(StatesGroup):
@@ -29,8 +32,11 @@ async def handle_scenario_callback(
         llm_service: Сервис для генерации ответов LLM
     """
     async with session_factory() as session:
+        logger.info(f"Обработка выбора сценария от пользователя {callback.from_user.id}")
+        
         # Парсим callback.data (например, "scenario_expensive" → "expensive")
         scenario_key = callback.data.replace("scenario_", "")
+        logger.info(f"Выбран сценарий: {scenario_key}")
         
         # Проверяем, что сценарий существует
         if scenario_key not in SCENARIOS:
@@ -60,11 +66,21 @@ async def handle_scenario_callback(
             messages=[]
         )
         
+        # Сохраняем первое сообщение ассистента в БД
+        await add_message(
+            session=session,
+            session_id=db_session.id,
+            role="assistant",
+            content=ai_response
+        )
+        
+        logger.info(f"Отправка первого ответа пользователю {callback.from_user.id}")
         # Отправляем ответ пользователю
         await callback.message.answer(ai_response)
         
         # Устанавливаем FSM state = "in_dialog"
         await state.set_state(DialogStates.in_dialog)
+        logger.info(f"Установлено состояние DialogStates.in_dialog для пользователя {callback.from_user.id}")
         
         # Сохраняем session_id и system_prompt в FSM state data
         await state.update_data(
