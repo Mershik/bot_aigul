@@ -1,7 +1,7 @@
 from typing import Callable, Dict, Any, Awaitable
 from time import time
 from aiogram import BaseMiddleware
-from aiogram.types import Message, Update
+from aiogram.types import TelegramObject
 
 from config.settings import RATE_LIMIT_SECONDS
 
@@ -19,21 +19,17 @@ class RateLimitMiddleware(BaseMiddleware):
 
     async def __call__(
         self,
-        handler: Callable[[Update, Dict[str, Any]], Awaitable[Any]],
-        event: Update,
+        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
         data: Dict[str, Any]
     ) -> Any:
-        # Получаем telegram_id пользователя
-        user = None
-        if event.message:
-            user = event.message.from_user
-        elif event.callback_query:
-            user = event.callback_query.from_user
-        
-        if user is None:
-            # Если не удалось получить пользователя, пропускаем событие
+        # В aiogram 3.x event — это сам Message или CallbackQuery.
+        # У обоих есть .from_user
+        user = getattr(event, "from_user", None)
+
+        if not user:
             return await handler(event, data)
-        
+
         telegram_id = user.id
         current_time = time()
         
