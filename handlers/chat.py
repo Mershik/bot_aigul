@@ -5,7 +5,7 @@ import logging
 from aiogram import types
 from aiogram.fsm.context import FSMContext
 
-from database.crud import add_message, get_session_messages, update_session
+from database.crud import add_message, get_session_messages, update_session, get_session_with_relations
 from config.settings import MAX_MESSAGE_LENGTH
 from handlers.scenarios import DialogStates
 
@@ -154,15 +154,18 @@ async def finish_session(
         try:
             from datetime import datetime
             # Обновляем статус сессии в БД
-            updated_session = await update_session(
+            await update_session(
                 session,
                 session_id,
                 status="completed",
                 finished_at=datetime.utcnow()
             )
             
+            # Получаем сессию с подгруженными связями
+            updated_session = await get_session_with_relations(session, session_id)
+            
             if not updated_session:
-                logger.error(f"Не удалось обновить сессию {session_id} при завершении")
+                logger.error(f"Не удалось получить сессию {session_id} при завершении")
                 return
 
             logger.info(f"Сессия {session_id} успешно обновлена в БД (status=completed)")

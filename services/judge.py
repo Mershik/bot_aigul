@@ -48,7 +48,15 @@ class JudgeService:
             
             # Парсим JSON ответ
             try:
-                evaluation_data = json.loads(response)
+                # Очистка текста от Markdown блоков и лишних пробелов
+                res_text = response.strip()
+                if res_text.startswith("```json"):
+                    res_text = res_text[7:]
+                if res_text.endswith("```"):
+                    res_text = res_text[:-3]
+                res_text = res_text.strip()
+                
+                evaluation_data = json.loads(res_text)
                 
                 # Валидация структуры ответа
                 score = evaluation_data.get("score", 5)

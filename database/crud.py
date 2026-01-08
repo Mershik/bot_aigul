@@ -131,6 +131,22 @@ async def update_session(
     duration_minutes: Optional[int] = None
 ) -> Optional[Session]:
     """Обновить данные сессии."""
+
+
+async def get_session_with_relations(
+    session: AsyncSession,
+    session_id: int
+) -> Optional[Session]:
+    """Получить сессию с подгруженными связями (scenario, messages)."""
+    result = await session.execute(
+        select(Session)
+        .options(
+            selectinload(Session.scenario),
+            selectinload(Session.messages)
+        )
+        .where(Session.id == session_id)
+    )
+    return result.scalar_one_or_none()
     result = await session.execute(
         select(Session).where(Session.id == session_id)
     )
