@@ -19,7 +19,13 @@ FINISH_PHRASES = [
 ]
 
 
-async def handle_message(message: types.Message, state: FSMContext, session_factory) -> None:
+async def handle_message(
+    message: types.Message,
+    state: FSMContext,
+    session_factory,
+    rag_service,
+    llm_service
+) -> None:
     """
     Обработка сообщений пользователя в активном диалоге
     
@@ -27,6 +33,8 @@ async def handle_message(message: types.Message, state: FSMContext, session_fact
         message: Входящее сообщение от пользователя
         state: Контекст состояния FSM
         session_factory: Фабрика для создания сессий БД
+        rag_service: Сервис для поиска в базе знаний
+        llm_service: Сервис для генерации ответов LLM
     """
     async with session_factory() as session:
         try:
@@ -57,11 +65,6 @@ async def handle_message(message: types.Message, state: FSMContext, session_fact
                 return
             
             logger.info(f"Обработка сообщения от пользователя {message.from_user.id}, session_id={session_id}")
-            
-            # Получаем сервисы из bot data
-            bot_data = message.bot
-            rag_service = bot_data.get("rag_service")
-            llm_service = bot_data.get("llm_service")
             
             # Сохраняем сообщение пользователя в БД
             await add_message(

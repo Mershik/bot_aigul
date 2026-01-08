@@ -12,11 +12,19 @@ async def handle_finish(
     message: types.Message,
     state: FSMContext,
     session_factory,
-    bot
+    judge_service,
+    sheets_service
 ) -> None:
     """
     Обработчик завершения диалога с клиентом.
     Оценивает сессию, отправляет результаты админу и записывает в Google Sheets.
+    
+    Args:
+        message: Сообщение пользователя
+        state: Контекст состояния FSM
+        session_factory: Фабрика для создания сессий БД
+        judge_service: Сервис для оценки сессий
+        sheets_service: Сервис для записи в Google Sheets
     """
     async with session_factory() as session:
         try:
@@ -39,10 +47,6 @@ async def handle_finish(
             if not updated_session:
                 await message.answer("❌ Ошибка при завершении диалога")
                 return
-            
-            # Получаем сервисы из bot data
-            judge_service = message.bot.get("judge_service")
-            sheets_service = message.bot.get("sheets_service")
             
             # Оцениваем сессию через JudgeService
             evaluation = await judge_service.evaluate_session(session, session_id)
@@ -110,7 +114,7 @@ async def handle_finish(
                         )]
                     ])
                     
-                    await bot.send_message(
+                    await message.bot.send_message(
                         admin_id,
                         admin_message,
                         reply_markup=keyboard,

@@ -5,7 +5,9 @@ from aiogram.types import TelegramObject
 
 class DatabaseMiddleware(BaseMiddleware):
     """
-    Middleware для передачи session_factory в handlers.
+    Middleware для передачи session_factory и сервисов в handlers.
+    В aiogram 3.x данные из dp автоматически доступны в data,
+    поэтому этот middleware просто пропускает событие дальше.
     """
 
     async def __call__(
@@ -14,12 +16,6 @@ class DatabaseMiddleware(BaseMiddleware):
         event: TelegramObject,
         data: Dict[str, Any]
     ) -> Any:
-        # Получаем session_factory из dispatcher data
-        session_factory = data.get("session_factory")
-        
-        if session_factory:
-            # Передаем session_factory в data для handlers
-            data["session_factory"] = session_factory
-        
-        # Вызываем handler
+        # В aiogram 3.x все данные из dp уже автоматически доступны в data
+        # Просто вызываем handler
         return await handler(event, data)

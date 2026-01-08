@@ -16,7 +16,8 @@ class DialogStates(StatesGroup):
 async def handle_scenario_callback(
     callback: types.CallbackQuery,
     state: FSMContext,
-    session_factory
+    session_factory,
+    llm_service
 ) -> None:
     """
     Обработчик выбора сценария из inline-кнопок.
@@ -25,6 +26,7 @@ async def handle_scenario_callback(
         callback: Callback query от кнопки сценария
         state: FSM контекст для управления состоянием
         session_factory: Фабрика для создания сессий БД
+        llm_service: Сервис для генерации ответов LLM
     """
     async with session_factory() as session:
         # Парсим callback.data (например, "scenario_expensive" → "expensive")
@@ -51,9 +53,6 @@ async def handle_scenario_callback(
         
         # Загружаем system_prompt из SCENARIOS
         system_prompt = SCENARIOS[scenario_key]["system_prompt"]
-        
-        # Получаем LLM сервис из bot data
-        llm_service = callback.bot.get("llm_service")
         
         # Вызываем LLMService.generate_response с пустым messages=[]
         ai_response = await llm_service.generate_response(
