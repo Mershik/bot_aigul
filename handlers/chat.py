@@ -79,8 +79,8 @@ async def handle_message(
                 content=message.text
             )
             
-            # Получаем последние 10 сообщений из истории
-            messages = await get_session_messages(session, session_id, limit=10)
+            # Получаем последние 20 сообщений из истории для поддержания контекста
+            messages = await get_session_messages(session, session_id, limit=20)
             
             # Выполняем RAG поиск по базе знаний
             rag_results = await rag_service.search(message.text, top_k=3)

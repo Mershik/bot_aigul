@@ -131,22 +131,6 @@ async def update_session(
     duration_minutes: Optional[int] = None
 ) -> Optional[Session]:
     """Обновить данные сессии."""
-
-
-async def get_session_with_relations(
-    session: AsyncSession,
-    session_id: int
-) -> Optional[Session]:
-    """Получить сессию с подгруженными связями (scenario, messages)."""
-    result = await session.execute(
-        select(Session)
-        .options(
-            selectinload(Session.scenario),
-            selectinload(Session.messages)
-        )
-        .where(Session.id == session_id)
-    )
-    return result.scalar_one_or_none()
     result = await session.execute(
         select(Session).where(Session.id == session_id)
     )
@@ -167,6 +151,22 @@ async def get_session_with_relations(
     await session.commit()
     await session.refresh(db_session)
     return db_session
+
+
+async def get_session_with_relations(
+    session: AsyncSession,
+    session_id: int
+) -> Optional[Session]:
+    """Получить сессию с подгруженными связями (scenario, messages)."""
+    result = await session.execute(
+        select(Session)
+        .options(
+            selectinload(Session.scenario),
+            selectinload(Session.messages)
+        )
+        .where(Session.id == session_id)
+    )
+    return result.scalar_one_or_none()
 
 
 async def add_message(
@@ -197,19 +197,27 @@ async def get_session_messages(
     query = (
         select(Message)
         .where(Message.session_id == session_id)
-        .order_by(Message.timestamp.desc())
+        .order_by(Message.timestamp.asc())
     )
     
     if limit:
-        query = query.limit(limit)
+        # Если есть лимит, берем последние сообщения, но сохраняем порядок
+        # Для этого сначала берем последние через desc, а потом сортируем обратно
+        subquery = (
+            select(Message)
+            .where(Message.session_id == session_id)
+            .order_by(Message.timestamp.desc())
+            .limit(limit)
+            .subquery()
+        )
+        query = select(subquery).order_by(subquery.c.timestamp.asc())
     
     result = await session.execute(query)
     messages = list(result.scalars().all())
     
-    # Возвращаем в обратном порядке (от старых к новым) и в формате для LLM
     return [
         {"role": msg.role, "content": msg.content}
-        for msg in reversed(messages)
+        for msg in messages
     ]
 
 

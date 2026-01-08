@@ -35,13 +35,20 @@ class LLMService:
             "Content-Type": "application/json"
         }
         
-        # Формируем системное сообщение с контекстом
+        # Формируем системное сообщение
         system_content = system_prompt
-        if context:
-            system_content += f"\n\nКонтекст:\n{context}"
         
         # Формируем полный список сообщений
-        full_messages = [{"role": "system", "content": system_content}] + messages
+        full_messages = [{"role": "system", "content": system_content}]
+        
+        # Если есть контекст RAG, добавляем его как отдельное системное сообщение или в начало истории
+        if context:
+            full_messages.append({
+                "role": "system",
+                "content": f"Используй следующие данные из базы знаний для ответов:\n{context}"
+            })
+            
+        full_messages.extend(messages)
         
         body = {
             "model": self.model,
