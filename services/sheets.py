@@ -1,5 +1,5 @@
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+import gspread_asyncio
+from google.oauth2.service_account import Credentials
 from config.settings import GOOGLE_SHEETS_ID, GOOGLE_CREDENTIALS_PATH
 import logging
 from datetime import datetime
@@ -7,40 +7,59 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 
+def get_creds():
+    """
+    Функция для получения credentials для gspread-asyncio.
+    Вызывается каждый раз при необходимости обновления токена.
+    """
+    creds = Credentials.from_service_account_file(GOOGLE_CREDENTIALS_PATH)
+    scoped = creds.with_scopes([
+        'https://spreadsheets.google.com/feeds',
+        'https://www.googleapis.com/auth/drive',
+        'https://www.googleapis.com/auth/spreadsheets'
+    ])
+    return scoped
+
+
 class SheetsService:
-    """Сервис для работы с Google Sheets"""
+    """Сервис для работы с Google Sheets (асинхронный)"""
     
     def __init__(self):
         """
         Инициализация сервиса Google Sheets.
-        Авторизация через credentials.json и открытие таблицы.
+        Создает менеджер для асинхронной работы с Google Sheets.
         """
         try:
-            # Определяем scope для доступа к Google Sheets и Drive
-            scope = [
-                'https://spreadsheets.google.com/feeds',
-                'https://www.googleapis.com/auth/drive'
-            ]
-            
-            # Авторизация через service account
-            credentials = ServiceAccountCredentials.from_json_keyfile_name(
-                GOOGLE_CREDENTIALS_PATH,
-                scope
-            )
-            
-            # Создаем клиент gspread
-            client = gspread.authorize(credentials)
-            
-            # Открываем таблицу по ID
-            spreadsheet = client.open_by_key(GOOGLE_SHEETS_ID)
-            
-            # Сохраняем первый worksheet (можно изменить на нужный)
-            self.worksheet = spreadsheet.sheet1
-            
-            logger.info(f"Успешно подключено к Google Sheets: {GOOGLE_SHEETS_ID}")
+            # Создаем AsyncioGspreadClientManager
+            self.agcm = gspread_asyncio.AsyncioGspreadClientManager(get_creds)
+            logger.info("SheetsService инициализирован успешно")
             
         except Exception as e:
             logger.error(f"Ошибка при инициализации SheetsService: {e}")
+            raise
+    
+    async def _get_worksheet(self):
+        """
+        Получает worksheet для работы.
+        Создает новое подключение для каждой операции.
+        
+        Returns:
+            Worksheet объект
+        """
+        try:
+            # Получаем авторизованного клиента
+            agc = await self.agcm.authorize()
+            
+            # Открываем таблицу по ID
+            spreadsheet = await agc.open_by_key(GOOGLE_SHEETS_ID)
+            
+            # Получаем первый worksheet
+            worksheet = await spreadsheet.get_worksheet(0)
+            
+            return worksheet
+            
+        except Exception as e:
+            logger.error(f"Ошибка при получении worksheet: {e}")
             raise
     
     async def append_row(self, data: dict):
@@ -58,6 +77,9 @@ class SheetsService:
                 - status: статус завершения
         """
         try:
+            # Получаем worksheet
+            worksheet = await self._get_worksheet()
+            
             # Формируем строку данных
             row = [
                 datetime.now().strftime("%Y-%m-%d %H:%M:%S"),  # дата и время
@@ -70,8 +92,8 @@ class SheetsService:
                 data.get('status', '')
             ]
             
-            # Добавляем строку в конец таблицы
-            self.worksheet.append_row(row)
+            # Добавляем строку в конец таблицы (асинхронно)
+            await worksheet.append_row(row, value_input_option='USER_ENTERED')
             
             logger.info(
                 f"Данные успешно добавлены в Google Sheets для пользователя "
@@ -114,6 +136,9 @@ class SheetsService:
             recommendations: Рекомендации
         """
         try:
+            # Получаем worksheet
+            worksheet = await self._get_worksheet()
+            
             # Формируем строку данных
             row = [
                 str(session_id),
@@ -128,8 +153,8 @@ class SheetsService:
                 recommendations
             ]
             
-            # Добавляем строку в конец таблицы
-            self.worksheet.append_row(row)
+            # Добавляем строку в конец таблицы (асинхронно)
+            await worksheet.append_row(row, value_input_option='USER_ENTERED')
             
             logger.info(f"Результаты сессии {session_id} успешно записаны в Google Sheets")
             
