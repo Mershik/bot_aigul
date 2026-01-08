@@ -23,7 +23,7 @@ openai==1.10.0
 python-dotenv==1.0.0
 
 # Google Sheets Integration
-gspread-asyncio==1.9.2
+gspread-asyncio>=1.9.0
 google-auth==2.27.0
 google-auth-oauthlib==1.2.0
 
