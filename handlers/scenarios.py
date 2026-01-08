@@ -1,8 +1,10 @@
 from aiogram import types
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from sqlalchemy import select
 
-from database.crud import create_session
+from database.crud import create_session, get_user_by_telegram_id
+from database.models import User
 from config.prompts import SCENARIOS
 
 
@@ -33,10 +35,17 @@ async def handle_scenario_callback(
             await callback.answer("Неизвестный сценарий", show_alert=True)
             return
         
-        # Создаем новую Session в БД
+        # Получаем пользователя из БД по telegram_id
+        user_obj = await get_user_by_telegram_id(session, callback.from_user.id)
+        
+        if not user_obj:
+            await callback.answer("❌ Пользователь не найден. Используйте /start", show_alert=True)
+            return
+        
+        # Создаем новую Session в БД с внутренним id пользователя
         db_session = await create_session(
             session=session,
-            user_id=callback.from_user.id,
+            user_id=user_obj.id,  # Используем внутренний id из БД
             scenario=scenario_key
         )
         

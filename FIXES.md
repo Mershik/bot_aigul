@@ -449,4 +449,110 @@ Docker кэширует слои образа. Если код изменилс�
 
 ---
 
+## 17. IntegrityError при создании сессии - ИСПРАВЛЕНО ✅
+
+### Проблемы:
+- В таблице `users` первичным ключом является автоинкрементный `id` (1, 2, 3...)
+- Таблица `sessions` связана с `users` через внешний ключ по колонке `id` (внутренний ID)
+- Код в `handlers/scenarios.py` передавал `callback.from_user.id` (Telegram ID) вместо внутреннего `id`
+- База данных выбрасывала `IntegrityError (ForeignKeyViolationError)`, так как не находила пользователя с таким порядковым номером
+
+### Исправления:
+
+#### handlers/scenarios.py
+```python
+# БЫЛО:
+from database.crud import create_session
+from config.prompts import SCENARIOS
+
+async def handle_scenario_callback(...):
+    async with session_factory() as session:
+        # ...
+        db_session = await create_session(
+            session=session,
+            user_id=callback.from_user.id,  # ❌ Telegram ID вместо внутреннего ID
+            scenario=scenario_key
+        )
+
+# СТАЛО:
+from database.crud import create_session, get_user_by_telegram_id
+from database.models import User
+from config.prompts import SCENARIOS
+from sqlalchemy import select
+
+async def handle_scenario_callback(...):
+    async with session_factory() as session:
+        # ...
+        # Получаем пользователя из БД по telegram_id
+        user_obj = await get_user_by_telegram_id(session, callback.from_user.id)
+        
+        if not user_obj:
+            await callback.answer("❌ Пользователь не найден. Используйте /start", show_alert=True)
+            return
+        
+        # Создаем новую Session в БД с внутренним id пользователя
+        db_session = await create_session(
+            session=session,
+            user_id=user_obj.id,  # ✅ Внутренний ID из БД
+            scenario=scenario_key
+        )
+```
+
+#### database/crud.py
+```python
+# Добавлена валидация и документация в create_session():
+
+async def create_session(
+    session: AsyncSession,
+    user_id: int,
+    scenario: str
+) -> Session:
+    """
+    Создать новую сессию.
+    
+    Args:
+        session: Сессия БД
+        user_id: Внутренний ID пользователя из таблицы users (НЕ telegram_id!)
+        scenario: Ключ сценария
+        
+    Returns:
+        Созданная сессия
+        
+    Raises:
+        ValueError: Если пользователь с указанным user_id не найден
+    """
+    # Проверяем существование пользователя
+    user_result = await session.execute(
+        select(User).where(User.id == user_id)
+    )
+    user = user_result.scalar_one_or_none()
+    
+    if not user:
+        raise ValueError(f"Пользователь с id={user_id} не найден в базе данных")
+    
+    # ... создание сессии
+```
+
+### Объяснение:
+В PostgreSQL таблица `users` имеет два поля:
+- `id` (Integer, Primary Key, Autoincrement) - внутренний порядковый номер: 1, 2, 3...
+- `telegram_id` (BigInteger, Unique) - ID пользователя в Telegram: 123456789, 987654321...
+
+Таблица `sessions` связана с `users` через `ForeignKey("users.id")`, то есть по внутреннему `id`, а не по `telegram_id`.
+
+Когда код передавал `callback.from_user.id` (например, 987654321), база данных искала пользователя с `id=987654321`, не находила его и выбрасывала ошибку нарушения внешнего ключа.
+
+Правильный подход:
+1. Получить объект пользователя из БД по `telegram_id`
+2. Использовать его внутренний `id` для создания связанных записей
+
+### Проверено:
+- ✅ `handlers/scenarios.py` - исправлено
+- ✅ `handlers/chat.py` - использует `session_id` из state, проблем нет
+- ✅ `handlers/finish.py` - использует `session_id` из state, проблем нет
+- ✅ `handlers/start.py` - корректно использует `get_user_by_telegram_id()` и `create_user()`
+- ✅ `database/crud.py` - добавлена валидация в `create_session()`
+
+---
+
 Проект готов к запуску! 🚀

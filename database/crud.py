@@ -43,7 +43,29 @@ async def create_session(
     user_id: int,
     scenario: str
 ) -> Session:
-    """Создать новую сессию."""
+    """
+    Создать новую сессию.
+    
+    Args:
+        session: Сессия БД
+        user_id: Внутренний ID пользователя из таблицы users (НЕ telegram_id!)
+        scenario: Ключ сценария
+        
+    Returns:
+        Созданная сессия
+        
+    Raises:
+        ValueError: Если пользователь с указанным user_id не найден
+    """
+    # Проверяем существование пользователя
+    user_result = await session.execute(
+        select(User).where(User.id == user_id)
+    )
+    user = user_result.scalar_one_or_none()
+    
+    if not user:
+        raise ValueError(f"Пользователь с id={user_id} не найден в базе данных")
+    
     new_session = Session(
         user_id=user_id,
         scenario_id=1,  # TODO: Получить scenario_id из базы по имени сценария
