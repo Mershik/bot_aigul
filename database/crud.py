@@ -221,16 +221,32 @@ async def create_evaluation(
     mistakes: Optional[List[str]] = None,
     recommendations: Optional[str] = None
 ) -> Evaluation:
-    """Создать оценку для сессии."""
-    evaluation = Evaluation(
-        session_id=session_id,
-        score=score,
-        good_points=good_points or [],
-        mistakes=mistakes or [],
-        recommendations=recommendations,
-        evaluated_at=datetime.utcnow()
+    """Создать или обновить оценку для сессии (Upsert)."""
+    # Проверяем наличие существующей оценки
+    result = await session.execute(
+        select(Evaluation).where(Evaluation.session_id == session_id)
     )
-    session.add(evaluation)
+    evaluation = result.scalar_one_or_none()
+    
+    if evaluation:
+        # Обновляем существующую
+        evaluation.score = score
+        evaluation.good_points = good_points or []
+        evaluation.mistakes = mistakes or []
+        evaluation.recommendations = recommendations
+        evaluation.evaluated_at = datetime.utcnow()
+    else:
+        # Создаем новую
+        evaluation = Evaluation(
+            session_id=session_id,
+            score=score,
+            good_points=good_points or [],
+            mistakes=mistakes or [],
+            recommendations=recommendations,
+            evaluated_at=datetime.utcnow()
+        )
+        session.add(evaluation)
+    
     await session.commit()
     await session.refresh(evaluation)
     return evaluation

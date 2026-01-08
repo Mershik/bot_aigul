@@ -153,6 +153,19 @@ async def finish_session(
     async with session_factory() as session:
         try:
             from datetime import datetime
+            
+            # Сначала получаем сессию, чтобы проверить статус
+            db_session_obj = await get_session_with_relations(session, session_id)
+            
+            if not db_session_obj:
+                logger.error(f"Сессия {session_id} не найдена")
+                return
+                
+            if db_session_obj.status == "completed":
+                logger.warning(f"Сессия {session_id} уже завершена. Пропускаем повторное завершение.")
+                await state.clear()
+                return
+
             # Обновляем статус сессии в БД
             await update_session(
                 session,
@@ -161,43 +174,50 @@ async def finish_session(
                 finished_at=datetime.utcnow()
             )
             
-            # Получаем сессию с подгруженными связями
+            # После коммита в update_session объект может стать expired.
+            # Получаем свежий объект с подгруженными связями для дальнейшей работы.
             updated_session = await get_session_with_relations(session, session_id)
             
             if not updated_session:
-                logger.error(f"Не удалось получить сессию {session_id} при завершении")
+                logger.error(f"Не удалось получить сессию {session_id} после обновления")
                 return
 
             logger.info(f"Сессия {session_id} успешно обновлена в БД (status=completed)")
 
-            # Оцениваем сессию через JudgeService
-            logger.info(f"Запуск оценки сессии {session_id}...")
-            evaluation = await judge_service.evaluate_session(session, session_id)
-            logger.info(f"Оценка сессии {session_id} завершена: score={evaluation.get('score')}")
+            # Оцениваем сессию и отправляем в Google Sheets в отдельном try-except с rollback
+            try:
+                # Оцениваем сессию через JudgeService
+                logger.info(f"Запуск оценки сессии {session_id}...")
+                evaluation = await judge_service.evaluate_session(session, session_id)
+                logger.info(f"Оценка сессии {session_id} завершена: score={evaluation.get('score')}")
 
-            # Подготовка данных для Google Sheets
-            username = message.from_user.username or message.from_user.full_name
-            date = updated_session.finished_at.strftime("%d.%m.%Y %H:%M")
-            scenario_name = updated_session.scenario.name if updated_session.scenario else "Неизвестно"
-            duration = updated_session.finished_at - updated_session.started_at
-            minutes = int(duration.total_seconds() / 60)
-            message_count = len(updated_session.messages)
+                # Подготовка данных для Google Sheets
+                username = message.from_user.username or message.from_user.full_name
+                date = updated_session.finished_at.strftime("%d.%m.%Y %H:%M")
+                scenario_name = updated_session.scenario.name if updated_session.scenario else "Неизвестно"
+                duration = updated_session.finished_at - updated_session.started_at
+                minutes = int(duration.total_seconds() / 60)
+                message_count = len(updated_session.messages)
 
-            # Записываем в Google Sheets
-            logger.info(f"Отправка результатов сессии {session_id} в Google Sheets...")
-            await sheets_service.write_session_result(
-                session_id=session_id,
-                username=username,
-                date=date,
-                scenario=scenario_name,
-                duration_minutes=minutes,
-                message_count=message_count,
-                score=evaluation.get("score", 0),
-                strengths=evaluation.get("strengths", []),
-                mistakes=evaluation.get("mistakes", []),
-                recommendations=evaluation.get("recommendations", "Нет рекомендаций")
-            )
-            logger.info(f"Результаты сессии {session_id} успешно отправлены в Google Sheets")
+                # Записываем в Google Sheets
+                logger.info(f"Отправка результатов сессии {session_id} в Google Sheets...")
+                await sheets_service.write_session_result(
+                    session_id=session_id,
+                    username=username,
+                    date=date,
+                    scenario=scenario_name,
+                    duration_minutes=minutes,
+                    message_count=message_count,
+                    score=evaluation.get("score", 0),
+                    strengths=evaluation.get("strengths", []),
+                    mistakes=evaluation.get("mistakes", []),
+                    recommendations=evaluation.get("recommendations", "Нет рекомендаций")
+                )
+                logger.info(f"Результаты сессии {session_id} успешно отправлены в Google Sheets")
+            except Exception as db_e:
+                logger.error(f"Ошибка при оценке или записи в Sheets для сессии {session_id}: {db_e}")
+                await session.rollback()
+                # Продолжаем, чтобы хотя бы очистить состояние и отправить сообщение
             
             # Очищаем состояние FSM
             await state.clear()
@@ -211,4 +231,5 @@ async def finish_session(
             )
         
         except Exception as e:
-            logger.error(f"Ошибка при завершении сессии {session_id}: {e}", exc_info=True)
+            logger.error(f"Критическая ошибка при завершении сессии {session_id}: {e}", exc_info=True)
+            await session.rollback()
