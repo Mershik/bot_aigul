@@ -210,7 +210,10 @@ async def get_session_messages(
             .limit(limit)
             .subquery()
         )
-        query = select(subquery).order_by(subquery.c.timestamp.asc())
+        # Используем aliased для корректного маппинга результата обратно в объекты Message
+        from sqlalchemy.orm import aliased
+        message_alias = aliased(Message, subquery)
+        query = select(message_alias).order_by(subquery.c.timestamp.asc())
     
     result = await session.execute(query)
     messages = list(result.scalars().all())
