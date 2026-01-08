@@ -1,7 +1,6 @@
 from aiogram import types
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.crud import create_session
 from config.prompts import SCENARIOS
@@ -15,54 +14,55 @@ class DialogStates(StatesGroup):
 async def handle_scenario_callback(
     callback: types.CallbackQuery,
     state: FSMContext,
-    session: AsyncSession
-):
+    session_factory
+) -> None:
     """
     Обработчик выбора сценария из inline-кнопок.
     
     Args:
         callback: Callback query от кнопки сценария
         state: FSM контекст для управления состоянием
-        session: Async сессия БД
+        session_factory: Фабрика для создания сессий БД
     """
-    # Парсим callback.data (например, "scenario_expensive" → "expensive")
-    scenario_key = callback.data.replace("scenario_", "")
-    
-    # Проверяем, что сценарий существует
-    if scenario_key not in SCENARIOS:
-        await callback.answer("Неизвестный сценарий", show_alert=True)
-        return
-    
-    # Создаем новую Session в БД
-    db_session = await create_session(
-        session=session,
-        user_id=callback.from_user.id,
-        scenario=scenario_key
-    )
-    
-    # Загружаем system_prompt из SCENARIOS
-    system_prompt = SCENARIOS[scenario_key]["system_prompt"]
-    
-    # Получаем LLM сервис из bot data
-    llm_service = callback.bot.get("llm_service")
-    
-    # Вызываем LLMService.generate_response с пустым messages=[]
-    ai_response = await llm_service.generate_response(
-        system_prompt=system_prompt,
-        messages=[]
-    )
-    
-    # Отправляем ответ пользователю
-    await callback.message.answer(ai_response)
-    
-    # Устанавливаем FSM state = "in_dialog"
-    await state.set_state(DialogStates.in_dialog)
-    
-    # Сохраняем session_id и system_prompt в FSM state data
-    await state.update_data(
-        session_id=db_session.id,
-        system_prompt=system_prompt
-    )
-    
-    # Подтверждаем callback
-    await callback.answer()
+    async with session_factory() as session:
+        # Парсим callback.data (например, "scenario_expensive" → "expensive")
+        scenario_key = callback.data.replace("scenario_", "")
+        
+        # Проверяем, что сценарий существует
+        if scenario_key not in SCENARIOS:
+            await callback.answer("Неизвестный сценарий", show_alert=True)
+            return
+        
+        # Создаем новую Session в БД
+        db_session = await create_session(
+            session=session,
+            user_id=callback.from_user.id,
+            scenario=scenario_key
+        )
+        
+        # Загружаем system_prompt из SCENARIOS
+        system_prompt = SCENARIOS[scenario_key]["system_prompt"]
+        
+        # Получаем LLM сервис из bot data
+        llm_service = callback.bot.get("llm_service")
+        
+        # Вызываем LLMService.generate_response с пустым messages=[]
+        ai_response = await llm_service.generate_response(
+            system_prompt=system_prompt,
+            messages=[]
+        )
+        
+        # Отправляем ответ пользователю
+        await callback.message.answer(ai_response)
+        
+        # Устанавливаем FSM state = "in_dialog"
+        await state.set_state(DialogStates.in_dialog)
+        
+        # Сохраняем session_id и system_prompt в FSM state data
+        await state.update_data(
+            session_id=db_session.id,
+            system_prompt=system_prompt
+        )
+        
+        # Подтверждаем callback
+        await callback.answer()

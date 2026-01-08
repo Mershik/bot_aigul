@@ -14,6 +14,7 @@ from services.judge import JudgeService
 from services.sheets import SheetsService
 from middlewares.auth import AuthMiddleware
 from middlewares.rate_limit import RateLimitMiddleware
+from middlewares.db_session import DatabaseMiddleware
 import handlers.start
 import handlers.scenarios
 import handlers.chat
@@ -51,7 +52,7 @@ async def main():
     try:
         # Инициализация базы данных
         logger.info("Инициализация базы данных...")
-        async_session = await init_db(DATABASE_URL)
+        session_factory = await init_db(DATABASE_URL)
         
         # Инициализация сервисов
         logger.info("Инициализация сервисов...")
@@ -70,8 +71,8 @@ async def main():
         judge_service = JudgeService()
         sheets_service = SheetsService()
         
-        # Сохранение сервисов и сессии в bot data для доступа из handlers
-        dp["db_session"] = async_session
+        # Сохранение сервисов и session_factory в bot data для доступа из handlers
+        dp["session_factory"] = session_factory
         dp["rag_service"] = rag_service
         dp["llm_service"] = llm_service
         dp["judge_service"] = judge_service
@@ -79,6 +80,8 @@ async def main():
         
         # Подключение middlewares
         logger.info("Подключение middlewares...")
+        dp.message.middleware(DatabaseMiddleware())
+        dp.callback_query.middleware(DatabaseMiddleware())
         dp.message.middleware(AuthMiddleware())
         dp.callback_query.middleware(AuthMiddleware())
         dp.message.middleware(RateLimitMiddleware())
