@@ -54,6 +54,10 @@ async def main():
         logger.info("Инициализация базы данных...")
         session_factory = await init_db(DATABASE_URL)
         
+        # Инициализация дефолтных сценариев
+        from database.crud import seed_scenarios
+        await seed_scenarios(session_factory)
+        
         # Инициализация сервисов
         logger.info("Инициализация сервисов...")
         

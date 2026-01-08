@@ -38,6 +38,46 @@ async def get_user_by_telegram_id(
     return result.scalar_one_or_none()
 
 
+async def get_or_create_scenario(
+    session: AsyncSession,
+    scenario_name: str
+) -> Scenario:
+    """
+    Получить сценарий по имени или создать новый.
+    
+    Args:
+        session: Сессия БД
+        scenario_name: Ключ сценария из SCENARIOS (например, 'expensive', 'cold_call')
+        
+    Returns:
+        Найденный или созданный сценарий
+    """
+    from config.prompts import SCENARIOS
+    
+    # Ищем сценарий по имени
+    result = await session.execute(
+        select(Scenario).where(Scenario.name == scenario_name)
+    )
+    scenario = result.scalar_one_or_none()
+    
+    # Если не найден, создаем
+    if not scenario:
+        if scenario_name not in SCENARIOS:
+            raise ValueError(f"Сценарий '{scenario_name}' не найден в конфигурации")
+        
+        scenario_config = SCENARIOS[scenario_name]
+        scenario = Scenario(
+            name=scenario_name,
+            description=scenario_config.get("name", ""),
+            system_prompt=scenario_config["system_prompt"]
+        )
+        session.add(scenario)
+        await session.commit()
+        await session.refresh(scenario)
+    
+    return scenario
+
+
 async def create_session(
     session: AsyncSession,
     user_id: int,
@@ -49,7 +89,7 @@ async def create_session(
     Args:
         session: Сессия БД
         user_id: Внутренний ID пользователя из таблицы users (НЕ telegram_id!)
-        scenario: Ключ сценария
+        scenario: Ключ сценария (например, 'expensive', 'cold_call')
         
     Returns:
         Созданная сессия
@@ -66,9 +106,12 @@ async def create_session(
     if not user:
         raise ValueError(f"Пользователь с id={user_id} не найден в базе данных")
     
+    # Получаем или создаем сценарий
+    scenario_obj = await get_or_create_scenario(session, scenario)
+    
     new_session = Session(
         user_id=user_id,
-        scenario_id=1,  # TODO: Получить scenario_id из базы по имени сценария
+        scenario_id=scenario_obj.id,
         status="active",
         started_at=datetime.utcnow(),
         messages_count=0
@@ -175,3 +218,32 @@ async def create_evaluation(
     await session.commit()
     await session.refresh(evaluation)
     return evaluation
+
+
+async def seed_scenarios(session_factory) -> None:
+    """
+    Инициализация таблицы scenarios дефолтными значениями.
+    Вызывается при запуске бота для предотвращения ошибок внешнего ключа.
+    """
+    import logging
+    from config.prompts import SCENARIOS
+    
+    async with session_factory() as session:
+        # Проверяем, есть ли уже сценарии
+        result = await session.execute(select(Scenario))
+        existing_scenarios = result.scalars().all()
+        
+        if not existing_scenarios:
+            # Добавляем все сценарии из конфигурации
+            for scenario_key, scenario_config in SCENARIOS.items():
+                scenario = Scenario(
+                    name=scenario_key,
+                    description=scenario_config.get("name", ""),
+                    system_prompt=scenario_config["system_prompt"]
+                )
+                session.add(scenario)
+            
+            await session.commit()
+            logging.info(f"✅ Добавлено {len(SCENARIOS)} дефолтных сценариев в БД")
+        else:
+            logging.info(f"ℹ️ В БД уже есть {len(existing_scenarios)} сценариев")
