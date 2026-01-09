@@ -226,10 +226,18 @@ async def finish_session(
                 logger.info(f"Результаты сессии {session_id} успешно отправлены в Google Sheets")
 
                 # Дополнительно записываем полный лог диалога на второй лист
+                # Сортируем сообщения по времени создания для корректного порядка
+                sorted_messages = sorted(updated_session.messages, key=lambda msg: msg.created_at)
+                
                 dialog_full_text = ""
-                for m in updated_session.messages:
+                for m in sorted_messages:
+                    # Корректное присвоение ролей
                     role_name = "Менеджер" if m.role == "user" else "Клиент"
-                    dialog_full_text += f"{role_name}: {m.content}\n\n"
+                    
+                    # Форматирование времени
+                    message_time = m.created_at.strftime("%H:%M:%S")
+                    
+                    dialog_full_text += f"[{message_time}] {role_name}: {m.content}\n\n"
                 
                 await sheets_service.write_dialog_log(
                     session_id=session_id,
