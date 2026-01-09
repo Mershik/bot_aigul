@@ -110,7 +110,13 @@ async def main():
         # Админские callback-и
         dp.callback_query.register(handlers.admin.handle_admin_employees, F.data == "admin_employees")
         dp.callback_query.register(handlers.admin.start_add_employee, F.data == "admin_add_employee")
-        dp.callback_query.register(handlers.start.handle_start, F.data == "back_to_start")
+        dp.callback_query.register(handlers.admin.delete_employee, F.data.startswith("admin_del_"))
+        
+        # Кнопка Назад (теперь обрабатывает и CallbackQuery)
+        @dp.callback_query(F.data == "back_to_start")
+        async def back_to_start_handler(callback: types.CallbackQuery, session_factory):
+            await handlers.start.handle_start(callback, session_factory)
+            await callback.answer()
         
         # Состояние ожидания ID сотрудника
         dp.message.register(
