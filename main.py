@@ -20,7 +20,6 @@ import handlers.scenarios
 import handlers.chat
 import handlers.finish
 import handlers.admin
-import handlers.admin_script_reply
 
 
 # Настройка логирования
@@ -114,10 +113,6 @@ async def main():
         dp.callback_query.register(handlers.admin.handle_admin_employees, F.data == "admin_employees")
         dp.callback_query.register(handlers.admin.start_add_employee, F.data == "admin_add_employee")
         dp.callback_query.register(handlers.admin.delete_employee, F.data.startswith("admin_del_"))
-        
-        # Ответ по скрипту
-        if handlers.admin_script_reply.ENABLE_SCRIPT_REPLY:
-            dp.include_router(handlers.admin_script_reply.router)
         
         # Кнопка Назад
         dp.callback_query.register(handlers.start.handle_start, F.data == "back_to_start")

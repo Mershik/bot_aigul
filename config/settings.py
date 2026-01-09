@@ -26,9 +26,6 @@ MAX_SESSION_DURATION_MINUTES = int(os.getenv("MAX_SESSION_DURATION_MINUTES", "30
 RATE_LIMIT_SECONDS = int(os.getenv("RATE_LIMIT_SECONDS", "2"))
 MAX_MESSAGE_LENGTH = int(os.getenv("MAX_MESSAGE_LENGTH", "500"))
 
-# Features
-ENABLE_SCRIPT_REPLY = os.getenv("ENABLE_SCRIPT_REPLY", "True").lower() == "true"
-
 # Validate
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN не задан в .env")

@@ -8,8 +8,6 @@ from aiogram.fsm.context import FSMContext
 from database.crud import add_message, get_session_messages, update_session, get_session_with_relations
 from config.settings import MAX_MESSAGE_LENGTH
 from handlers.scenarios import DialogStates
-from handlers.admin_script_reply import get_script_reply_keyboard
-from config.settings import ADMIN_IDS, ENABLE_SCRIPT_REPLY
 
 logger = logging.getLogger(__name__)
 
@@ -109,12 +107,7 @@ async def handle_message(
             )
             
             # Отправляем ответ пользователю
-            # Если это админ и включен функционал подсказок, добавляем кнопку под ответ бота
-            reply_markup = None
-            if ENABLE_SCRIPT_REPLY and message.from_user.id in ADMIN_IDS:
-                reply_markup = get_script_reply_keyboard()
-            
-            await message.answer(response, reply_markup=reply_markup)
+            await message.answer(response)
             
             logger.info(f"Ответ отправлен пользователю {message.from_user.id}")
             
