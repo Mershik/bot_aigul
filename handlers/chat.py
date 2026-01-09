@@ -234,10 +234,7 @@ async def finish_session(
                     # Корректное присвоение ролей
                     role_name = "Менеджер" if m.role == "user" else "Клиент"
                     
-                    # Форматирование времени
-                    message_time = m.timestamp.strftime("%H:%M:%S")
-                    
-                    dialog_full_text += f"[{message_time}] {role_name}: {m.content}\n\n"
+                    dialog_full_text += f"{role_name}: {m.content}\n\n"
                 
                 await sheets_service.write_dialog_log(
                     session_id=session_id,

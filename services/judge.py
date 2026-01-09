@@ -61,9 +61,15 @@ class JudgeService:
                 try:
                     logger.info(f"Попытка оценки #{attempt + 1} для сессии {session_id}")
                     
-                    # Вызываем LLM для оценки
+                    # Формируем диалог в виде текста для анализа, чтобы LLM не продолжала роль клиента
+                    dialog_text = "ДИАЛОГ ДЛЯ АНАЛИЗА:\n"
+                    for m in msgs:
+                        role_name = "Менеджер" if m['role'] == 'user' else "Клиент"
+                        dialog_text += f"{role_name}: {m['content']}\n"
+                    
+                    # Вызываем LLM для оценки, передавая диалог как одно сообщение
                     response = await self.llm_service.generate_response(
-                        messages=msgs,
+                        messages=[{"role": "user", "content": dialog_text}],
                         system_prompt=final_system_prompt
                     )
                     
