@@ -57,26 +57,25 @@ async def handle_start(message: types.Message, session_factory) -> None:
             "👇 Выберите сценарий для тренировки:"
         )
 
-        # Если админ - добавляем админские кнопки сверху
+        # Если админ - показываем только панель управления
         if user.is_admin:
             sheets_url = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEETS_ID}"
-            admin_buttons = [
+            admin_keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [
                     InlineKeyboardButton(text="📊 Отчеты (Google Sheets)", url=sheets_url),
                     InlineKeyboardButton(text="👥 Сотрудники", callback_data="admin_employees")
+                ],
+                [
+                    InlineKeyboardButton(text="🚀 Запустить тренажер", callback_data="start_trainer")
                 ]
-            ]
-            keyboard = InlineKeyboardMarkup(inline_keyboard=admin_buttons + scenario_buttons)
-            # Возвращаем полное описание для админа, но в компактном виде
-            admin_welcome = (
-                f"👋 **Панель Администратора**\n\n"
-                f"{welcome_text}"
-            )
+            ])
+            
+            admin_text = "👋 **Панель управления Администратора**\n\nВыберите раздел:"
             
             if isinstance(message, types.Message):
-                await message.answer(admin_welcome, reply_markup=keyboard, parse_mode="Markdown")
+                await message.answer(admin_text, reply_markup=admin_keyboard, parse_mode="Markdown")
             elif isinstance(message, types.CallbackQuery):
-                await message.message.edit_text(admin_welcome, reply_markup=keyboard, parse_mode="Markdown")
+                await message.message.edit_text(admin_text, reply_markup=admin_keyboard, parse_mode="Markdown")
         else:
             # Обычный сотрудник
             keyboard = InlineKeyboardMarkup(inline_keyboard=scenario_buttons)
@@ -84,3 +83,30 @@ async def handle_start(message: types.Message, session_factory) -> None:
                 welcome_text,
                 reply_markup=keyboard
             )
+
+async def show_trainer_for_admin(callback: types.CallbackQuery, session_factory):
+    """Показывает админу приветствие и сценарии тренажера."""
+    # Формируем кнопки сценариев
+    scenario_buttons = []
+    for key, scenario in SCENARIOS.items():
+        button = InlineKeyboardButton(
+            text=scenario["name"],
+            callback_data=f"scenario_{key}"
+        )
+        scenario_buttons.append([button])
+    
+    # Добавляем кнопку Назад в админку
+    scenario_buttons.append([InlineKeyboardButton(text="⬅️ Назад в админку", callback_data="back_to_start")])
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=scenario_buttons)
+    
+    welcome_text = (
+        "👋 Добро пожаловать в Тренажер Продаж!\n"
+        "Ты — менеджер школы английского языка «Global Speak RF».\n"
+        "Я — твой потенциальный клиент. Я знаю цены, сравниваю вас с конкурентами и внимательно читаю договор. 🧐\n"
+        "Твоя задача: выявить мои потребности, отработать возражения и закрыть сделку. В конце диалога ИИ-Судья оценит твою работу и даст советы.\n"
+        "👇 Выберите сценарий для тренировки:"
+    )
+    
+    await callback.message.edit_text(welcome_text, reply_markup=keyboard)
+    await callback.answer()

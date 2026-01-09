@@ -11,7 +11,7 @@ from database.crud import create_user, get_user_by_telegram_id
 logger = logging.getLogger(__name__)
 
 class AdminStates(StatesGroup):
-    waiting_for_employee_id = State()
+    waiting_for_employee_data = State()
 
 async def handle_admin_employees(callback: types.CallbackQuery, session_factory):
     """Показывает список сотрудников с кнопками удаления."""
@@ -59,32 +59,42 @@ async def delete_employee(callback: types.CallbackQuery, session_factory):
     await handle_admin_employees(callback, session_factory)
 
 async def start_add_employee(callback: types.CallbackQuery, state: FSMContext):
-    """Запрашивает ID нового сотрудника."""
-    await callback.message.answer("Пришлите Telegram ID сотрудника:")
-    await state.set_state(AdminStates.waiting_for_employee_id)
+    """Запрашивает данные нового сотрудника."""
+    await callback.message.answer(
+        "Введите данные сотрудника в формате:\n`ID Имя` (через пробел)\n\n"
+        "Пример: `144842314 Иван Иванов`",
+        parse_mode="Markdown"
+    )
+    await state.set_state(AdminStates.waiting_for_employee_data)
     await callback.answer()
 
 async def process_add_employee(message: types.Message, state: FSMContext, session_factory):
-    """Сохраняет нового сотрудника в базу."""
-    if not message.text.isdigit():
-        await message.answer("❌ Ошибка: ID должен состоять только из цифр.")
+    """Сохраняет нового сотрудника в базу с именем."""
+    parts = message.text.split(maxsplit=1)
+    
+    if len(parts) < 2 or not parts[0].isdigit():
+        await message.answer("❌ Ошибка! Введите ID (цифры) и Имя через пробел.\nПример: `12345678 Иван`")
         return
     
-    new_id = int(message.text)
+    new_id = int(parts[0])
+    new_name = parts[1]
     
     async with session_factory() as session:
         existing = await get_user_by_telegram_id(session, new_id)
         if existing:
-            await message.answer(f"ℹ️ ID `{new_id}` уже есть в базе.")
+            # Если пользователь уже есть, просто обновим ему имя
+            existing.full_name = new_name
+            await session.commit()
+            await message.answer(f"✅ Имя сотрудника с ID `{new_id}` обновлено на `{new_name}`.")
         else:
             await create_user(
                 session=session,
                 telegram_id=new_id,
                 username=f"user_{new_id}",
-                full_name="Новый сотрудник",
+                full_name=new_name,
                 is_admin=False
             )
-            await message.answer(f"✅ Сотрудник `{new_id}` добавлен.")
+            await message.answer(f"✅ Сотрудник `{new_name}` (ID: `{new_id}`) успешно добавлен.")
     
     await state.clear()
     # Возвращаемся в меню (имитируем callback)

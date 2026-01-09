@@ -108,6 +108,8 @@ async def main():
         dp.message.register(handlers.finish.handle_finish, Command("finish"))
         
         # Админские callback-и
+        # Админские callback-и
+        dp.callback_query.register(handlers.start.show_trainer_for_admin, F.data == "start_trainer")
         dp.callback_query.register(handlers.admin.handle_admin_employees, F.data == "admin_employees")
         dp.callback_query.register(handlers.admin.start_add_employee, F.data == "admin_add_employee")
         dp.callback_query.register(handlers.admin.delete_employee, F.data.startswith("admin_del_"))
@@ -118,10 +120,10 @@ async def main():
             await handlers.start.handle_start(callback, session_factory)
             await callback.answer()
         
-        # Состояние ожидания ID сотрудника
+        # Состояние ожидания данных сотрудника (ID и Имя)
         dp.message.register(
             handlers.admin.process_add_employee,
-            handlers.admin.AdminStates.waiting_for_employee_id
+            handlers.admin.AdminStates.waiting_for_employee_data
         )
         
         # Обработчик текстовых сообщений в диалоге (должен быть последним)
