@@ -109,22 +109,13 @@ async def handle_message(
             )
             
             # Отправляем ответ пользователю
-            await message.answer(response)
-            
-            # Если включен функционал ответов по скрипту, дублируем сообщение админам с кнопкой
-            if ENABLE_SCRIPT_REPLY:
+            # Если это админ и включен функционал подсказок, добавляем кнопку под ответ бота
+            reply_markup = None
+            if ENABLE_SCRIPT_REPLY and message.from_user.id in ADMIN_IDS:
                 reply_markup = get_script_reply_keyboard()
-                for admin_id in ADMIN_IDS:
-                    try:
-                        await message.bot.send_message(
-                            chat_id=admin_id,
-                            text=f"👤 **Пользователь {message.from_user.full_name} (ID: {message.from_user.id}) пишет:**\n\n{message.text}",
-                            reply_markup=reply_markup,
-                            parse_mode="Markdown"
-                        )
-                    except Exception as e:
-                        logger.error(f"Не удалось отправить уведомление админу {admin_id}: {e}")
-
+            
+            await message.answer(response, reply_markup=reply_markup)
+            
             logger.info(f"Ответ отправлен пользователю {message.from_user.id}")
             
             # Проверяем ключевые фразы для завершения диалога

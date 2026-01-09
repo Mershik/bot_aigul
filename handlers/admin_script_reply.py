@@ -19,22 +19,22 @@ async def handle_script_reply(callback: types.CallbackQuery, llm_service: LLMSer
 
     await callback.answer("Генерирую ответ...")
     
-    # Извлекаем текст сообщения, на которое нужно ответить
-    # В данном случае мы предполагаем, что кнопка прикреплена к сообщению пользователя
-    # или к пересланному сообщению в админ-чате.
-    user_message_text = callback.message.text or callback.message.caption or ""
+    # Извлекаем текст сообщения бота (клиента), на которое админу нужно ответить
+    bot_message_text = callback.message.text or callback.message.caption or ""
     
-    if not user_message_text:
+    if not bot_message_text:
         await callback.message.answer("Не удалось получить текст сообщения для анализа.")
         return
 
     try:
-        # 1. Поиск в базе знаний (скрипты)
-        context_list = await rag_service.search(user_message_text, collection_type="scripts", top_k=3)
+        # 1. Поиск в базе знаний (скрипты) на основе сообщения бота
+        # Чтобы понять, как ответить на реплику бота, мы ищем подходящие скрипты
+        context_list = await rag_service.search(bot_message_text, collection_type="scripts", top_k=3)
         context = "\n---\n".join(context_list) if context_list else "Скрипты не найдены."
 
         # 2. Генерация ответа через LLM
-        messages = [{"role": "user", "content": user_message_text}]
+        # Мы просим LLM придумать ответ МЕНЕДЖЕРА на реплику КЛИЕНТА (бота)
+        messages = [{"role": "user", "content": f"Клиент сказал: {bot_message_text}"}]
         ai_reply = await llm_service.generate_response(
             messages=messages,
             system_prompt=SCRIPT_REPLY_SYSTEM_PROMPT,
