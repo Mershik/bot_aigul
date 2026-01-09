@@ -5,17 +5,19 @@ from config.prompts import SCENARIOS
 from config.settings import ADMIN_IDS, GOOGLE_SHEETS_ID
 
 
-async def handle_start(message: types.Message, session_factory) -> None:
+async def handle_start(event: types.Union[types.Message, types.CallbackQuery], session_factory) -> None:
     """
-    Обработчик команды /start.
-    
-    Проверяет наличие пользователя в БД, создает при необходимости,
-    и отправляет приветственное сообщение с соответствующими кнопками
-    в зависимости от роли (админ/сотрудник).
+    Обработчик команды /start и возврата в меню.
     """
+    # Определяем объект сообщения и ID пользователя
+    if isinstance(event, types.CallbackQuery):
+        message = event.message
+        telegram_id = event.from_user.id
+    else:
+        message = event
+        telegram_id = event.from_user.id
+
     async with session_factory() as session:
-        telegram_id = message.from_user.id
-        
         # Проверяем, есть ли пользователь в БД
         user = await get_user_by_telegram_id(session, telegram_id)
         
@@ -24,8 +26,8 @@ async def handle_start(message: types.Message, session_factory) -> None:
         
         # Если пользователя нет, создаем его
         if not user:
-            username = message.from_user.username or ""
-            full_name = message.from_user.full_name or ""
+            username = event.from_user.username or ""
+            full_name = event.from_user.full_name or ""
             user = await create_user(
                 session=session,
                 telegram_id=telegram_id,
