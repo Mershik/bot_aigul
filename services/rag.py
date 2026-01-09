@@ -13,7 +13,7 @@ class RAGService:
     
     def __init__(self):
         """
-        Инициализирует ChromaDB и создает коллекцию для базы знаний.
+        Инициализирует ChromaDB и создает коллекции для базы знаний.
         Использует sentence_transformers для создания embeddings.
         """
         # Инициализация ChromaDB с persistent storage
@@ -29,154 +29,135 @@ class RAGService:
         logger.info("Загрузка модели sentence_transformers...")
         self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
         
-        # Создание или получение коллекции
+        # Создание или получение коллекций
         try:
-            self.collection = self.client.get_or_create_collection(
-                name="knowledge_base",
-                metadata={"description": "База знаний для RAG"}
+            # Коллекция для знаний бота-клиента
+            self.client_collection = self.client.get_or_create_collection(
+                name="client_knowledge",
+                metadata={"description": "База знаний для бота-клиента"}
             )
-            logger.info(f"Коллекция 'knowledge_base' инициализирована. Документов: {self.collection.count()}")
+            
+            # Коллекция для эталонных скриптов (для судьи)
+            self.scripts_collection = self.client.get_or_create_collection(
+                name="sales_scripts",
+                metadata={"description": "Эталонные скрипты для оценки"}
+            )
+            
+            logger.info(f"Коллекции инициализированы. Клиент: {self.client_collection.count()}, Скрипты: {self.scripts_collection.count()}")
         except Exception as e:
-            logger.error(f"Ошибка при инициализации коллекции: {e}")
+            logger.error(f"Ошибка при инициализации коллекций: {e}")
             raise
     
-    async def load_knowledge_base(self, folder_path: str):
+    async def load_knowledge_base(self, base_path: str):
         """
-        Загружает документы из указанной папки в базу знаний.
+        Загружает документы из указанной папки, распределяя их по коллекциям.
         
         Args:
-            folder_path: Путь к папке с документами (.pdf и .txt файлы)
+            base_path: Путь к корневой папке базы знаний
         """
-        if not os.path.exists(folder_path):
-            logger.error(f"Папка не найдена: {folder_path}")
+        if not os.path.exists(base_path):
+            logger.error(f"Папка не найдена: {base_path}")
             return
+
+        # Рекурсивный обход папок
+        for root, dirs, files in os.walk(base_path):
+            for filename in files:
+                file_path = os.path.join(root, filename)
+                
+                # Определяем целевую коллекцию на основе пути
+                if "scripts" in root.lower():
+                    collection = self.scripts_collection
+                    logger.info(f"Файл {filename} определен в коллекцию SCRIPTS")
+                else:
+                    collection = self.client_collection
+                    logger.info(f"Файл {filename} определен в коллекцию CLIENT")
+
+                await self._process_file(file_path, filename, collection)
+
+    async def _process_file(self, file_path: str, filename: str, collection):
+        """Вспомогательный метод для обработки и загрузки одного файла."""
+        text_content = ""
         
+        if filename.lower().endswith('.pdf'):
+            try:
+                with open(file_path, 'rb') as pdf_file:
+                    pdf_reader = pypdf.PdfReader(pdf_file)
+                    for page in pdf_reader.pages:
+                        text_content += page.extract_text() + "\n"
+            except Exception as e:
+                logger.error(f"Ошибка при чтении PDF {filename}: {e}")
+                return
+        
+        elif filename.lower().endswith('.txt'):
+            try:
+                with open(file_path, 'r', encoding='utf-8') as txt_file:
+                    text_content = txt_file.read()
+            except Exception as e:
+                logger.error(f"Ошибка при чтении TXT {filename}: {e}")
+                return
+        else:
+            return
+
+        if not text_content.strip():
+            return
+
+        chunks = self._split_text(text_content, chunk_size=500)
         documents = []
         metadatas = []
         ids = []
-        doc_counter = 0
-        
-        # Обход всех файлов в папке
-        for filename in os.listdir(folder_path):
-            file_path = os.path.join(folder_path, filename)
-            
-            # Пропускаем директории
-            if not os.path.isfile(file_path):
-                continue
-            
-            text_content = ""
-            
-            # Обработка PDF файлов
-            if filename.lower().endswith('.pdf'):
-                try:
-                    with open(file_path, 'rb') as pdf_file:
-                        pdf_reader = pypdf.PdfReader(pdf_file)
-                        for page in pdf_reader.pages:
-                            text_content += page.extract_text() + "\n"
-                    logger.info(f"Загружен PDF: {filename}")
-                except Exception as e:
-                    logger.error(f"Ошибка при чтении PDF {filename}: {e}")
-                    continue
-            
-            # Обработка TXT файлов
-            elif filename.lower().endswith('.txt'):
-                try:
-                    with open(file_path, 'r', encoding='utf-8') as txt_file:
-                        text_content = txt_file.read()
-                    logger.info(f"Загружен TXT: {filename}")
-                except Exception as e:
-                    logger.error(f"Ошибка при чтении TXT {filename}: {e}")
-                    continue
-            else:
-                continue
-            
-            # Разбивка текста на chunks по 500 символов
-            chunks = self._split_text(text_content, chunk_size=500)
-            
-            # Добавление chunks в списки для загрузки
-            for i, chunk in enumerate(chunks):
-                if chunk.strip():  # Пропускаем пустые chunks
-                    doc_id = f"{filename}_chunk_{i}"
-                    documents.append(chunk)
-                    metadatas.append({
-                        "source": filename,
-                        "chunk_index": i,
-                        "file_path": file_path
-                    })
-                    ids.append(doc_id)
-                    doc_counter += 1
-        
-        # Загрузка документов в ChromaDB
+
+        for i, chunk in enumerate(chunks):
+            if chunk.strip():
+                doc_id = f"{filename}_chunk_{i}_{collection.name}"
+                documents.append(chunk)
+                metadatas.append({
+                    "source": filename,
+                    "chunk_index": i,
+                    "file_path": file_path
+                })
+                ids.append(doc_id)
+
         if documents:
-            try:
-                # Создание embeddings
-                embeddings = self.embedding_model.encode(documents).tolist()
-                
-                # Добавление в коллекцию
-                self.collection.add(
-                    documents=documents,
-                    embeddings=embeddings,
-                    metadatas=metadatas,
-                    ids=ids
-                )
-                logger.info(f"Успешно загружено {doc_counter} фрагментов из {len(set(m['source'] for m in metadatas))} файлов")
-            except Exception as e:
-                logger.error(f"Ошибка при загрузке документов в ChromaDB: {e}")
-        else:
-            logger.warning(f"Не найдено документов для загрузки в папке: {folder_path}")
-    
-    async def search(self, query: str, top_k: int = 3) -> list[str]:
+            embeddings = self.embedding_model.encode(documents).tolist()
+            collection.add(
+                documents=documents,
+                embeddings=embeddings,
+                metadatas=metadatas,
+                ids=ids
+            )
+            logger.info(f"Загружено {len(documents)} фрагментов из {filename} в {collection.name}")
+
+    async def search(self, query: str, collection_type: str = "client", top_k: int = 3) -> list[str]:
         """
-        Выполняет поиск релевантных фрагментов по запросу.
+        Выполняет поиск в указанной коллекции.
         
         Args:
             query: Поисковый запрос
-            top_k: Количество возвращаемых результатов
-            
-        Returns:
-            Список релевантных фрагментов текста
+            collection_type: Тип коллекции ("client" или "scripts")
+            top_k: Количество результатов
         """
-        # Проверка на пустую базу
-        if self.collection.count() == 0:
-            logger.warning("База знаний пуста. Сначала загрузите документы.")
+        collection = self.scripts_collection if collection_type == "scripts" else self.client_collection
+        
+        if collection.count() == 0:
+            logger.warning(f"Коллекция {collection.name} пуста.")
             return []
         
         try:
-            # Создание embedding для запроса
             query_embedding = self.embedding_model.encode([query]).tolist()
-            
-            # Поиск в ChromaDB
-            results = self.collection.query(
+            results = collection.query(
                 query_embeddings=query_embedding,
-                n_results=min(top_k, self.collection.count())
+                n_results=min(top_k, collection.count())
             )
             
-            # Извлечение текстов из результатов
             if results and results['documents'] and len(results['documents']) > 0:
-                documents = results['documents'][0]
-                logger.info(f"Найдено {len(documents)} релевантных фрагментов для запроса: '{query[:50]}...'")
-                return documents
-            else:
-                logger.info(f"Не найдено релевантных фрагментов для запроса: '{query[:50]}...'")
-                return []
-                
+                return results['documents'][0]
+            return []
         except Exception as e:
-            logger.error(f"Ошибка при поиске: {e}")
+            logger.error(f"Ошибка при поиске в {collection.name}: {e}")
             return []
     
     def _split_text(self, text: str, chunk_size: int = 500) -> list[str]:
-        """
-        Разбивает текст на chunks заданного размера.
-        
-        Args:
-            text: Исходный текст
-            chunk_size: Размер chunk в символах
-            
-        Returns:
-            Список chunks
-        """
         chunks = []
         for i in range(0, len(text), chunk_size):
-            chunk = text[i:i + chunk_size]
-            chunks.append(chunk)
+            chunks.append(text[i:i + chunk_size])
         return chunks

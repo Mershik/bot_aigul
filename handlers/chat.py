@@ -82,8 +82,8 @@ async def handle_message(
             # Получаем последние 20 сообщений из истории для поддержания контекста
             messages = await get_session_messages(session, session_id, limit=20)
             
-            # Выполняем RAG поиск по базе знаний
-            rag_results = await rag_service.search(message.text, top_k=3)
+            # Выполняем RAG поиск по базе знаний (только в коллекции для клиента)
+            rag_results = await rag_service.search(message.text, collection_type="client", top_k=3)
             
             # Формируем контекст из результатов RAG
             context = "\n".join(rag_results) if rag_results else ""
@@ -190,9 +190,9 @@ async def finish_session(
 
             # Оцениваем сессию и отправляем в Google Sheets в отдельном try-except с rollback
             try:
-                # Оцениваем сессию через JudgeService
+                # Оцениваем сессию через JudgeService (с использованием RAG для скриптов)
                 logger.info(f"Запуск оценки сессии {session_id}...")
-                evaluation = await judge_service.evaluate_session(session, session_id)
+                evaluation = await judge_service.evaluate_session(session, session_id, rag_service=rag_service)
                 logger.info(f"Оценка сессии {session_id} завершена: score={evaluation.get('score')}")
 
                 # Подготовка данных для Google Sheets
@@ -217,7 +217,7 @@ async def finish_session(
                     duration_minutes=minutes,
                     message_count=message_count,
                     score=evaluation.get("score", 0),
-                    strengths=evaluation.get("strengths", []),
+                    strengths=evaluation.get("good_points", []),
                     mistakes=evaluation.get("mistakes", []),
                     recommendations=evaluation.get("recommendations", "Нет рекомендаций")
                 )

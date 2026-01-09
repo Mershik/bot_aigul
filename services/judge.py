@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class JudgeService:
-    """Сервис для оценки сессий психологического консультирования."""
+    """Сервис для оценки сессий продаж на основе эталонных скриптов."""
     
     def __init__(self):
         """
@@ -19,16 +19,17 @@ class JudgeService:
         """
         self.llm_service = LLMService()
     
-    async def evaluate_session(self, db_session: AsyncSession, session_id: int) -> dict:
+    async def evaluate_session(self, db_session: AsyncSession, session_id: int, rag_service=None) -> dict:
         """
-        Оценка сессии консультирования.
+        Оценка сессии диалога.
         
         Args:
             db_session: Асинхронная сессия БД
             session_id: ID сессии для оценки
+            rag_service: Сервис RAG для поиска эталонных скриптов
             
         Returns:
-            dict: Результат оценки с полями score, good_points, mistakes, recommendations
+            dict: Результат оценки
         """
         try:
             # Получаем все сообщения сессии
@@ -38,60 +39,60 @@ class JudgeService:
                 logger.warning(f"Сессия {session_id} не содержит сообщений")
                 return self._get_default_evaluation()
             
-            # Сообщения уже в формате для LLM
-            messages = msgs
+            # Поиск эталонных скриптов, если RAG доступен
+            scripts_context = ""
+            if rag_service:
+                # Используем текст сообщений сотрудника (assistant) для поиска релевантных скриптов
+                employee_messages = " ".join([m['content'] for m in msgs if m['role'] == 'assistant'])
+                if employee_messages:
+                    relevant_scripts = await rag_service.search(employee_messages, collection_type="scripts", top_k=3)
+                    if relevant_scripts:
+                        scripts_context = "\n\nЭТАЛОННЫЕ СКРИПТЫ ДЛЯ ПРОВЕРКИ:\n" + "\n---\n".join(relevant_scripts)
             
-            # Вызываем LLM для оценки с системным промптом судьи
+            # Формируем финальный системный промпт с контекстом
+            final_system_prompt = JUDGE_SYSTEM_PROMPT + scripts_context
+            
+            # Вызываем LLM для оценки
             response = await self.llm_service.generate_response(
-                messages=messages,
-                system_prompt=JUDGE_SYSTEM_PROMPT
+                messages=msgs,
+                system_prompt=final_system_prompt
             )
             
             # Парсим JSON ответ
             try:
-                # Очистка текста от Markdown блоков и лишних пробелов
                 res_text = response.strip()
-                
-                # Пытаемся найти JSON с помощью регулярного выражения, если он обернут в текст
                 json_match = re.search(r'(\{.*\})', res_text, re.DOTALL)
                 if json_match:
                     res_text = json_match.group(1)
                 else:
-                    # Если регулярка не сработала, пробуем старый метод очистки
                     if res_text.startswith("```json"):
                         res_text = res_text[7:]
                     if res_text.endswith("```"):
                         res_text = res_text[:-3]
                     res_text = res_text.strip()
                 
-                try:
-                    evaluation_data = json.loads(res_text)
-                except json.JSONDecodeError:
-                    logger.error(f"Не удалось распарсить JSON даже после очистки. Ответ: {response}")
-                    return self._get_default_evaluation()
+                evaluation_data = json.loads(res_text)
                 
-                # Валидация структуры ответа
+                # Валидация структуры
                 score = evaluation_data.get("score", 5)
-                good_points = evaluation_data.get("good_points", "Не указано")
-                mistakes = evaluation_data.get("mistakes", "Не указано")
+                good_points = evaluation_data.get("good_points", [])
+                mistakes = evaluation_data.get("mistakes", [])
                 recommendations = evaluation_data.get("recommendations", "Не указано")
                 
-            except json.JSONDecodeError as e:
+            except (json.JSONDecodeError, Exception) as e:
                 logger.error(f"Ошибка парсинга JSON ответа от LLM: {e}")
-                logger.debug(f"Ответ LLM: {response}")
                 return self._get_default_evaluation()
             
             # Сохраняем оценку в БД
-            evaluation = await create_evaluation(
+            await create_evaluation(
                 session=db_session,
                 session_id=session_id,
                 score=score,
-                good_points=good_points,
-                mistakes=mistakes,
+                good_points=json.dumps(good_points, ensure_ascii=False) if isinstance(good_points, list) else str(good_points),
+                mistakes=json.dumps(mistakes, ensure_ascii=False) if isinstance(mistakes, list) else str(mistakes),
                 recommendations=recommendations
             )
             
-            # Возвращаем результат
             result = {
                 "session_id": session_id,
                 "score": score,
@@ -100,7 +101,7 @@ class JudgeService:
                 "recommendations": recommendations
             }
             
-            logger.info(f"Сессия {session_id} успешно оценена. Оценка: {score}/10")
+            logger.info(f"Сессия {session_id} успешно оценена по скриптам. Оценка: {score}/10")
             return result
             
         except Exception as e:
@@ -108,12 +109,6 @@ class JudgeService:
             return self._get_default_evaluation()
     
     def _get_default_evaluation(self) -> dict:
-        """
-        Возвращает дефолтные значения оценки при ошибке.
-        
-        Returns:
-            dict: Дефолтная оценка
-        """
         return {
             "session_id": None,
             "score": 5,
