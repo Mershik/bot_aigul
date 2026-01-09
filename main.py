@@ -19,6 +19,7 @@ import handlers.start
 import handlers.scenarios
 import handlers.chat
 import handlers.finish
+import handlers.admin
 
 
 # Настройка логирования
@@ -105,6 +106,17 @@ async def main():
         
         # /finish команда
         dp.message.register(handlers.finish.handle_finish, Command("finish"))
+        
+        # Админские callback-и
+        dp.callback_query.register(handlers.admin.handle_admin_employees, F.data == "admin_employees")
+        dp.callback_query.register(handlers.admin.start_add_employee, F.data == "admin_add_employee")
+        dp.callback_query.register(handlers.start.handle_start, F.data == "back_to_start")
+        
+        # Состояние ожидания ID сотрудника
+        dp.message.register(
+            handlers.admin.process_add_employee,
+            handlers.admin.AdminStates.waiting_for_employee_id
+        )
         
         # Обработчик текстовых сообщений в диалоге (должен быть последним)
         dp.message.register(

@@ -2,7 +2,7 @@ from aiogram import types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from database.crud import get_user_by_telegram_id, create_user
 from config.prompts import SCENARIOS
-from config.settings import ADMIN_IDS
+from config.settings import ADMIN_IDS, GOOGLE_SHEETS_ID
 
 
 async def handle_start(message: types.Message, session_factory) -> None:
@@ -40,37 +40,40 @@ async def handle_start(message: types.Message, session_factory) -> None:
                 await session.commit()
                 await session.refresh(user)
         
-        # Проверяем роль пользователя
+        # Формируем кнопки сценариев (доступны всем)
+        scenario_buttons = []
+        for key, scenario in SCENARIOS.items():
+            button = InlineKeyboardButton(
+                text=scenario["name"],
+                callback_data=f"scenario_{key}"
+            )
+            scenario_buttons.append([button])
+        
+        welcome_text = (
+            "👋 Добро пожаловать в Тренажер Продаж!\n"
+            "Ты — менеджер школы английского языка «Global Speak RF».\n"
+            "Я — твой потенциальный клиент. Я знаю цены, сравниваю вас с конкурентами и внимательно читаю договор. 🧐\n"
+            "Твоя задача: выявить мои потребности, отработать возражения и закрыть сделку. В конце диалога ИИ-Судья оценит твою работу и даст советы.\n"
+            "👇 Выберите сценарий для тренировки:"
+        )
+
+        # Если админ - добавляем админские кнопки сверху
         if user.is_admin:
-            # Админ: показываем админские кнопки
-            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            sheets_url = f"https://docs.google.com/spreadsheets/d/{GOOGLE_SHEETS_ID}"
+            admin_buttons = [
                 [
-                    InlineKeyboardButton(text="📊 Отчеты", callback_data="admin_reports"),
+                    InlineKeyboardButton(text="📊 Отчеты (Google Sheets)", url=sheets_url),
                     InlineKeyboardButton(text="👥 Сотрудники", callback_data="admin_employees")
                 ]
-            ])
+            ]
+            keyboard = InlineKeyboardMarkup(inline_keyboard=admin_buttons + scenario_buttons)
             await message.answer(
-                "👋 Добро пожаловать, Администратор!",
+                f"👋 Добро пожаловать, Администратор!\n\n{welcome_text}",
                 reply_markup=keyboard
             )
         else:
-            # Сотрудник: показываем кнопки сценариев
-            buttons = []
-            for key, scenario in SCENARIOS.items():
-                button = InlineKeyboardButton(
-                    text=scenario["name"],
-                    callback_data=f"scenario_{key}"
-                )
-                buttons.append([button])
-            
-            keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
-            welcome_text = (
-                "👋 Добро пожаловать в Тренажер Продаж!\n"
-                "Ты — менеджер школы английского языка «Global Speak RF».\n"
-                "Я — твой потенциальный клиент. Я знаю цены, сравниваю вас с конкурентами и внимательно читаю договор. 🧐\n"
-                "Твоя задача: выявить мои потребности, отработать возражения и закрыть сделку. В конце диалога ИИ-Судья оценит твою работу и даст советы.\n"
-                "👇 Выберите сценарий для тренировки:"
-            )
+            # Обычный сотрудник
+            keyboard = InlineKeyboardMarkup(inline_keyboard=scenario_buttons)
             await message.answer(
                 welcome_text,
                 reply_markup=keyboard
