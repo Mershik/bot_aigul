@@ -19,19 +19,26 @@ async def handle_start(message: types.Message, session_factory) -> None:
         # Проверяем, есть ли пользователь в БД
         user = await get_user_by_telegram_id(session, telegram_id)
         
+        # Проверяем, является ли пользователь админом по списку из настроек
+        is_admin_in_config = telegram_id in ADMIN_IDS
+        
         # Если пользователя нет, создаем его
         if not user:
             username = message.from_user.username or ""
             full_name = message.from_user.full_name or ""
-            # Проверяем, является ли пользователь админом по списку из настроек
-            is_admin = telegram_id in ADMIN_IDS
             user = await create_user(
                 session=session,
                 telegram_id=telegram_id,
                 username=username,
                 full_name=full_name,
-                is_admin=is_admin
+                is_admin=is_admin_in_config
             )
+        else:
+            # Если пользователь есть, но его статус админа изменился в конфиге - обновляем в БД
+            if user.is_admin != is_admin_in_config:
+                user.is_admin = is_admin_in_config
+                await session.commit()
+                await session.refresh(user)
         
         # Проверяем роль пользователя
         if user.is_admin:
