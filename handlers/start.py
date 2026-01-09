@@ -72,10 +72,10 @@ async def handle_start(message: types.Message, session_factory) -> None:
             
             admin_text = "👋 **Панель управления Администратора**\n\nВыберите раздел:"
             
-            if isinstance(message, types.Message):
+            if isinstance(event, types.Message):
                 await message.answer(admin_text, reply_markup=admin_keyboard, parse_mode="Markdown")
-            elif isinstance(message, types.CallbackQuery):
-                await message.message.edit_text(admin_text, reply_markup=admin_keyboard, parse_mode="Markdown")
+            else:
+                await message.edit_text(admin_text, reply_markup=admin_keyboard, parse_mode="Markdown")
         else:
             # Обычный сотрудник
             keyboard = InlineKeyboardMarkup(inline_keyboard=scenario_buttons)
@@ -86,6 +86,7 @@ async def handle_start(message: types.Message, session_factory) -> None:
 
 async def show_trainer_for_admin(callback: types.CallbackQuery, session_factory):
     """Показывает админу приветствие и сценарии тренажера."""
+    await callback.answer()
     # Формируем кнопки сценариев
     scenario_buttons = []
     for key, scenario in SCENARIOS.items():
