@@ -11,6 +11,7 @@ async def handle_start(event: types.Union[types.Message, types.CallbackQuery], s
     """
     # Определяем объект сообщения и ID пользователя
     if isinstance(event, types.CallbackQuery):
+        await event.answer() # Мгновенный ответ на кнопку Назад
         message = event.message
         telegram_id = event.from_user.id
     else:

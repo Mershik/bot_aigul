@@ -62,6 +62,7 @@ async def delete_employee(callback: types.CallbackQuery, session_factory):
 
 async def start_add_employee(callback: types.CallbackQuery, state: FSMContext):
     """Запрашивает данные нового сотрудника."""
+    await callback.answer()
     await callback.message.answer(
         "Введите данные сотрудника в формате:\n`ID Имя` (через пробел)\n\n"
         "Пример: `144842314 Иван Иванов`",
