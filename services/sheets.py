@@ -161,3 +161,32 @@ class SheetsService:
         except Exception as e:
             logger.error(f"Ошибка при записи результатов сессии {session_id} в Google Sheets: {e}")
             # Не пробрасываем исключение, чтобы не прерывать работу бота
+
+    async def write_dialog_log(self, session_id: int, username: str, dialog_text: str):
+        """
+        Записывает полный текст диалога на второй лист таблицы.
+        """
+        try:
+            agc = await self.agcm.authorize()
+            spreadsheet = await agc.open_by_key(GOOGLE_SHEETS_ID)
+            
+            # Пытаемся получить второй лист (индекс 1), если его нет - создаем
+            try:
+                worksheet = await spreadsheet.get_worksheet(1)
+            except Exception:
+                worksheet = await spreadsheet.add_worksheet(title="Диалоги", rows="1000", cols="5")
+                # Добавляем заголовки, если лист новый
+                await worksheet.append_row(["ID Сессии", "Дата", "Сотрудник", "Полный диалог"])
+
+            row = [
+                str(session_id),
+                datetime.now().strftime("%d.%m.%Y %H:%M"),
+                username,
+                dialog_text
+            ]
+            
+            await worksheet.append_row(row, value_input_option='USER_ENTERED')
+            logger.info(f"Лог диалога для сессии {session_id} успешно записан")
+            
+        except Exception as e:
+            logger.error(f"Ошибка при записи лога диалога {session_id}: {e}")

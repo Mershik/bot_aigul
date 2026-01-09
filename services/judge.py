@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+import asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.llm import LLMService
@@ -52,52 +53,64 @@ class JudgeService:
             # Формируем финальный системный промпт с контекстом
             final_system_prompt = JUDGE_SYSTEM_PROMPT + scripts_context
             
-            # Вызываем LLM для оценки
-            response = await self.llm_service.generate_response(
-                messages=msgs,
-                system_prompt=final_system_prompt
-            )
+            # Попытки генерации оценки (до 3-х раз)
+            max_retries = 3
+            evaluation_data = None
             
-            # Парсим JSON ответ
-            res_text = response.strip()
-            try:
-                # 1. Пытаемся найти JSON через регулярку с DOTALL
-                json_match = re.search(r'(\{.*\})', res_text, re.DOTALL)
-                if json_match:
-                    res_text = json_match.group(1)
-                else:
-                    # 2. Если регулярка не сработала, ищем вручную по скобкам
-                    start_idx = res_text.find('{')
-                    end_idx = res_text.rfind('}')
-                    if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
-                        res_text = res_text[start_idx:end_idx + 1]
+            for attempt in range(max_retries):
+                try:
+                    logger.info(f"Попытка оценки #{attempt + 1} для сессии {session_id}")
+                    
+                    # Вызываем LLM для оценки
+                    response = await self.llm_service.generate_response(
+                        messages=msgs,
+                        system_prompt=final_system_prompt
+                    )
+                    
+                    # Парсим JSON ответ
+                    res_text = response.strip()
+                    
+                    # 1. Пытаемся найти JSON через регулярку с DOTALL
+                    json_match = re.search(r'(\{.*\})', res_text, re.DOTALL)
+                    if json_match:
+                        res_text = json_match.group(1)
                     else:
-                        # 3. Очистка от Markdown если ничего не помогло
-                        if res_text.startswith("```json"):
-                            res_text = res_text[7:]
-                        if res_text.endswith("```"):
-                            res_text = res_text[:-3]
-                        res_text = res_text.strip()
-                
-                # Очистка от управляющих символов, которые могут ломать json.loads
-                res_text = re.sub(r'[\x00-\x1F\x7F-\x9F]', '', res_text)
-                
-                evaluation_data = json.loads(res_text, strict=False)
-                
-                # Валидация структуры
-                score = evaluation_data.get("score", 5)
-                good_points = evaluation_data.get("good_points", [])
-                mistakes = evaluation_data.get("mistakes", [])
-                recommendations = evaluation_data.get("recommendations", "Не указано")
-                
-            except (json.JSONDecodeError, Exception) as e:
-                logger.error(f"Ошибка парсинга JSON ответа от LLM: {e}")
-                # Логируем начало и конец ответа для отладки
-                preview_start = response[:500].replace('\n', ' ')
-                preview_end = response[-500:].replace('\n', ' ')
-                logger.error(f"Raw response start: {preview_start}...")
-                logger.error(f"Raw response end: ...{preview_end}")
-                return self._get_default_evaluation()
+                        # 2. Если регулярка не сработала, ищем вручную по скобкам
+                        start_idx = res_text.find('{')
+                        end_idx = res_text.rfind('}')
+                        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                            res_text = res_text[start_idx:end_idx + 1]
+                        else:
+                            # 3. Очистка от Markdown если ничего не помогло
+                            if res_text.startswith("```json"):
+                                res_text = res_text[7:]
+                            if res_text.endswith("```"):
+                                res_text = res_text[:-3]
+                            res_text = res_text.strip()
+                    
+                    # Очистка от управляющих символов, которые могут ломать json.loads
+                    res_text = re.sub(r'[\x00-\x1F\x7F-\x9F]', '', res_text)
+                    
+                    evaluation_data = json.loads(res_text, strict=False)
+                    
+                    # Если мы здесь, значит JSON успешно распарсен
+                    logger.info(f"JSON успешно распарсен на попытке {attempt + 1}")
+                    break
+                    
+                except (json.JSONDecodeError, Exception) as e:
+                    logger.warning(f"Попытка {attempt + 1} не удалась: {e}")
+                    if attempt == max_retries - 1:
+                        logger.error(f"Все {max_retries} попыток оценки провалены.")
+                        logger.error(f"ПОЛНЫЙ ОТВЕТ LLM (ПОСЛЕДНЯЯ ПОПЫТКА):\n{response}")
+                        return self._get_default_evaluation()
+                    # Небольшая пауза перед следующей попыткой
+                    await asyncio.sleep(1)
+            
+            # Валидация структуры (после успешного выхода из цикла)
+            score = evaluation_data.get("score", 5)
+            good_points = evaluation_data.get("good_points", [])
+            mistakes = evaluation_data.get("mistakes", [])
+            recommendations = evaluation_data.get("recommendations", "Не указано")
             
             # Сохраняем оценку в БД
             await create_evaluation(

@@ -224,6 +224,19 @@ async def finish_session(
                     recommendations=evaluation.get("recommendations", "Нет рекомендаций")
                 )
                 logger.info(f"Результаты сессии {session_id} успешно отправлены в Google Sheets")
+
+                # Дополнительно записываем полный лог диалога на второй лист
+                dialog_full_text = ""
+                for m in updated_session.messages:
+                    role_name = "Менеджер" if m.role == "user" else "Клиент"
+                    dialog_full_text += f"{role_name}: {m.content}\n\n"
+                
+                await sheets_service.write_dialog_log(
+                    session_id=session_id,
+                    username=username,
+                    dialog_text=dialog_full_text
+                )
+
             except Exception as db_e:
                 logger.error(f"Ошибка при оценке или записи в Sheets для сессии {session_id}: {db_e}")
                 await session.rollback()
