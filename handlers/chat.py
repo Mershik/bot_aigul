@@ -8,6 +8,8 @@ from aiogram.fsm.context import FSMContext
 from database.crud import add_message, get_session_messages, update_session, get_session_with_relations
 from config.settings import MAX_MESSAGE_LENGTH
 from handlers.scenarios import DialogStates
+from handlers.admin_script_reply import get_script_reply_keyboard
+from config.settings import ADMIN_IDS, ENABLE_SCRIPT_REPLY
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +111,20 @@ async def handle_message(
             # Отправляем ответ пользователю
             await message.answer(response)
             
+            # Если включен функционал ответов по скрипту, дублируем сообщение админам с кнопкой
+            if ENABLE_SCRIPT_REPLY:
+                reply_markup = get_script_reply_keyboard()
+                for admin_id in ADMIN_IDS:
+                    try:
+                        await message.bot.send_message(
+                            chat_id=admin_id,
+                            text=f"👤 **Пользователь {message.from_user.full_name} (ID: {message.from_user.id}) пишет:**\n\n{message.text}",
+                            reply_markup=reply_markup,
+                            parse_mode="Markdown"
+                        )
+                    except Exception as e:
+                        logger.error(f"Не удалось отправить уведомление админу {admin_id}: {e}")
+
             logger.info(f"Ответ отправлен пользователю {message.from_user.id}")
             
             # Проверяем ключевые фразы для завершения диалога
