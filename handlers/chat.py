@@ -120,6 +120,7 @@ async def handle_message(
                     state,
                     session_factory,
                     session_id,
+                    rag_service,
                     judge_service,
                     sheets_service
                 )
@@ -136,6 +137,7 @@ async def finish_session(
     state: FSMContext,
     session_factory,
     session_id: int,
+    rag_service,
     judge_service,
     sheets_service
 ):
