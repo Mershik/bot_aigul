@@ -139,6 +139,14 @@ class SheetsService:
             # Получаем worksheet
             worksheet = await self._get_worksheet()
             
+            # Получаем ID листа "Диалоги" для формирования ссылки
+            spreadsheet = await worksheet.spreadsheet
+            dialogs_worksheet = await spreadsheet.worksheet("Диалоги")
+            dialogs_gid = dialogs_worksheet.id
+            
+            # Определяем номер следующей строки
+            next_row = len(await worksheet.col_values(1)) + 1
+
             # Формируем строку данных
             row = [
                 str(session_id),
@@ -150,9 +158,11 @@ class SheetsService:
                 str(score),
                 ", ".join(strengths) if strengths else "",
                 ", ".join(mistakes) if mistakes else "",
-                recommendations
+                recommendations,
+                f'=HYPERLINK("#gid={dialogs_gid}&range=A" & MATCH(A{next_row}; \'Диалоги\'!A:A; 0); "👁 Посмотреть")'
             ]
             
+            # Примечание: Мы используем формулу MATCH для поиска ID сессии на листе 'Диалоги'
             # Добавляем строку в конец таблицы (асинхронно)
             await worksheet.append_row(row, value_input_option='USER_ENTERED')
             
