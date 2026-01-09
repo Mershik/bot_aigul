@@ -139,6 +139,12 @@ class SheetsService:
             # Получаем worksheet
             worksheet = await self._get_worksheet()
             
+            # Проверяем заголовки на первом листе
+            headers = await worksheet.row_values(1)
+            if not headers or "Ссылка" not in headers:
+                new_headers = ["ID Сессии", "Сотрудник", "Дата", "Сценарий", "Мин", "Сообщ", "Балл", "Плюсы", "Ошибки", "Советы", "Ссылка"]
+                await worksheet.update('A1:K1', [new_headers])
+
             # Получаем ID листа "Диалоги" для формирования ссылки
             spreadsheet = await worksheet.spreadsheet
             dialogs_worksheet = await spreadsheet.worksheet("Диалоги")
@@ -186,13 +192,21 @@ class SheetsService:
             except Exception:
                 worksheet = await spreadsheet.add_worksheet(title="Диалоги", rows="1000", cols="5")
                 # Добавляем заголовки, если лист новый
-                await worksheet.append_row(["ID Сессии", "Дата", "Сотрудник", "Полный диалог"])
+                await worksheet.append_row(["ID Сессии", "Дата", "Сотрудник", "Полный диалог", "Результат"])
+
+            # Получаем GID первого листа для обратной ссылки
+            main_worksheet = await spreadsheet.get_worksheet(0)
+            main_gid = main_worksheet.id
+            
+            # Определяем номер следующей строки на листе Диалоги
+            next_row = len(await worksheet.col_values(1)) + 1
 
             row = [
                 str(session_id),
                 datetime.now().strftime("%d.%m.%Y %H:%M"),
                 username,
-                dialog_text
+                dialog_text,
+                f'=HYPERLINK("#gid={main_gid}&range=A" & MATCH(A{next_row}; \'{main_worksheet.title}\'!A:A; 0); "⭐ К оценке")'
             ]
             
             await worksheet.append_row(row, value_input_option='USER_ENTERED')
