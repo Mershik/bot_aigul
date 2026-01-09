@@ -71,6 +71,10 @@ class JudgeService:
                         res_text = res_text[:-3]
                     res_text = res_text.strip()
                 
+                # Очистка от управляющих символов, которые могут ломать json.loads
+                # Оставляем только стандартные пробельные символы (пробел, таб, перевод строки)
+                res_text = re.sub(r'[\x00-\x1F\x7F-\x9F]', '', res_text)
+                
                 evaluation_data = json.loads(res_text)
                 
                 # Валидация структуры
