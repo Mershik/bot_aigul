@@ -146,7 +146,8 @@ class SheetsService:
                 await worksheet.update('A1:K1', [new_headers])
 
             # Получаем ID листа "Диалоги" для формирования ссылки
-            spreadsheet = await worksheet.spreadsheet
+            agc = await self.agcm.authorize()
+            spreadsheet = await agc.open_by_key(GOOGLE_SHEETS_ID)
             dialogs_worksheet = await spreadsheet.worksheet("Диалоги")
             dialogs_gid = dialogs_worksheet.id
             
