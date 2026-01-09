@@ -67,13 +67,16 @@ async def handle_start(message: types.Message, session_factory) -> None:
                 ]
             ]
             keyboard = InlineKeyboardMarkup(inline_keyboard=admin_buttons + scenario_buttons)
-            # Для админа сокращаем текст, чтобы влезли кнопки
-            admin_welcome = "👋 Панель управления Администратора.\nВыберите действие или сценарий для теста:"
+            # Возвращаем полное описание для админа, но в компактном виде
+            admin_welcome = (
+                f"👋 **Панель Администратора**\n\n"
+                f"{welcome_text}"
+            )
             
             if isinstance(message, types.Message):
-                await message.answer(admin_welcome, reply_markup=keyboard)
+                await message.answer(admin_welcome, reply_markup=keyboard, parse_mode="Markdown")
             elif isinstance(message, types.CallbackQuery):
-                await message.message.edit_text(admin_welcome, reply_markup=keyboard)
+                await message.message.edit_text(admin_welcome, reply_markup=keyboard, parse_mode="Markdown")
         else:
             # Обычный сотрудник
             keyboard = InlineKeyboardMarkup(inline_keyboard=scenario_buttons)
