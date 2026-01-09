@@ -2,6 +2,7 @@ from aiogram import types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from database.crud import get_user_by_telegram_id, create_user
 from config.prompts import SCENARIOS
+from config.settings import ADMIN_IDS
 
 
 async def handle_start(message: types.Message, session_factory) -> None:
@@ -22,11 +23,14 @@ async def handle_start(message: types.Message, session_factory) -> None:
         if not user:
             username = message.from_user.username or ""
             full_name = message.from_user.full_name or ""
+            # Проверяем, является ли пользователь админом по списку из настроек
+            is_admin = telegram_id in ADMIN_IDS
             user = await create_user(
                 session=session,
                 telegram_id=telegram_id,
                 username=username,
-                full_name=full_name
+                full_name=full_name,
+                is_admin=is_admin
             )
         
         # Проверяем роль пользователя
@@ -53,7 +57,14 @@ async def handle_start(message: types.Message, session_factory) -> None:
                 buttons.append([button])
             
             keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+            welcome_text = (
+                "👋 Добро пожаловать в Тренажер Продаж!\n"
+                "Ты — менеджер школы английского языка «Global Speak RF».\n"
+                "Я — твой потенциальный клиент. Я знаю цены, сравниваю вас с конкурентами и внимательно читаю договор. 🧐\n"
+                "Твоя задача: выявить мои потребности, отработать возражения и закрыть сделку. В конце диалога ИИ-Судья оценит твою работу и даст советы.\n"
+                "👇 Выберите сценарий для тренировки:"
+            )
             await message.answer(
-                "👋 Добро пожаловать! Выберите сценарий:",
+                welcome_text,
                 reply_markup=keyboard
             )
