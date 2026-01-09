@@ -163,8 +163,8 @@ class SheetsService:
                 str(duration_minutes),
                 str(message_count),
                 str(score),
-                ", ".join(strengths) if strengths else "",
-                ", ".join(mistakes) if mistakes else "",
+                ", ".join(strengths) if strengths else "Не выявлено",
+                ", ".join(mistakes) if mistakes else "Ошибок нет",
                 recommendations,
                 f'=HYPERLINK("#gid={dialogs_gid}&range=A" & MATCH(A{next_row}; \'Диалоги\'!A:A; 0); "👁 Посмотреть")'
             ]
