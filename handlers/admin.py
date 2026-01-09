@@ -15,6 +15,7 @@ class AdminStates(StatesGroup):
 
 async def handle_admin_employees(callback: types.CallbackQuery, session_factory):
     """Показывает список сотрудников с кнопками удаления."""
+    await callback.answer()
     async with session_factory() as session:
         # Получаем всех пользователей, которые не админы
         result = await session.execute(select(User).where(User.is_admin == False))
@@ -49,6 +50,7 @@ async def handle_admin_employees(callback: types.CallbackQuery, session_factory)
 
 async def delete_employee(callback: types.CallbackQuery, session_factory):
     """Удаляет сотрудника из базы."""
+    await callback.answer("⏳ Удаление...", show_alert=False)
     user_id = int(callback.data.replace("admin_del_", ""))
     
     async with session_factory() as session:

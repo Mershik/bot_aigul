@@ -31,6 +31,9 @@ async def handle_scenario_callback(
         session_factory: Фабрика для создания сессий БД
         llm_service: Сервис для генерации ответов LLM
     """
+    # Сразу отвечаем на колбэк, чтобы убрать "часики"
+    await callback.answer()
+    
     async with session_factory() as session:
         logger.info(f"Обработка выбора сценария от пользователя {callback.from_user.id}")
         
