@@ -227,7 +227,7 @@ async def finish_session(
 
                 # Дополнительно записываем полный лог диалога на второй лист
                 # Сортируем сообщения по времени создания для корректного порядка
-                sorted_messages = sorted(updated_session.messages, key=lambda msg: msg.created_at)
+                sorted_messages = sorted(updated_session.messages, key=lambda msg: msg.timestamp)
                 
                 dialog_full_text = ""
                 for m in sorted_messages:
@@ -235,7 +235,7 @@ async def finish_session(
                     role_name = "Менеджер" if m.role == "user" else "Клиент"
                     
                     # Форматирование времени
-                    message_time = m.created_at.strftime("%H:%M:%S")
+                    message_time = m.timestamp.strftime("%H:%M:%S")
                     
                     dialog_full_text += f"[{message_time}] {role_name}: {m.content}\n\n"
                 

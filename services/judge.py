@@ -43,8 +43,8 @@ class JudgeService:
             # Поиск эталонных скриптов, если RAG доступен
             scripts_context = ""
             if rag_service:
-                # Используем текст сообщений сотрудника (assistant) для поиска релевантных скриптов
-                employee_messages = " ".join([m['content'] for m in msgs if m['role'] == 'assistant'])
+                # Используем текст сообщений сотрудника (user) для поиска релевантных скриптов
+                employee_messages = " ".join([m['content'] for m in msgs if m['role'] == 'user'])
                 if employee_messages:
                     relevant_scripts = await rag_service.search(employee_messages, collection_type="scripts", top_k=3)
                     if relevant_scripts:
@@ -117,8 +117,8 @@ class JudgeService:
                 session=db_session,
                 session_id=session_id,
                 score=score,
-                good_points=json.dumps(good_points, ensure_ascii=False) if isinstance(good_points, list) else str(good_points),
-                mistakes=json.dumps(mistakes, ensure_ascii=False) if isinstance(mistakes, list) else str(mistakes),
+                good_points=good_points,
+                mistakes=mistakes,
                 recommendations=recommendations
             )
             
