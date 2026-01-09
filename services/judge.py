@@ -59,23 +59,30 @@ class JudgeService:
             )
             
             # Парсим JSON ответ
+            res_text = response.strip()
             try:
-                res_text = response.strip()
+                # 1. Пытаемся найти JSON через регулярку с DOTALL
                 json_match = re.search(r'(\{.*\})', res_text, re.DOTALL)
                 if json_match:
                     res_text = json_match.group(1)
                 else:
-                    if res_text.startswith("```json"):
-                        res_text = res_text[7:]
-                    if res_text.endswith("```"):
-                        res_text = res_text[:-3]
-                    res_text = res_text.strip()
+                    # 2. Если регулярка не сработала, ищем вручную по скобкам
+                    start_idx = res_text.find('{')
+                    end_idx = res_text.rfind('}')
+                    if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                        res_text = res_text[start_idx:end_idx + 1]
+                    else:
+                        # 3. Очистка от Markdown если ничего не помогло
+                        if res_text.startswith("```json"):
+                            res_text = res_text[7:]
+                        if res_text.endswith("```"):
+                            res_text = res_text[:-3]
+                        res_text = res_text.strip()
                 
                 # Очистка от управляющих символов, которые могут ломать json.loads
-                # Оставляем только стандартные пробельные символы (пробел, таб, перевод строки)
                 res_text = re.sub(r'[\x00-\x1F\x7F-\x9F]', '', res_text)
                 
-                evaluation_data = json.loads(res_text)
+                evaluation_data = json.loads(res_text, strict=False)
                 
                 # Валидация структуры
                 score = evaluation_data.get("score", 5)
@@ -85,6 +92,11 @@ class JudgeService:
                 
             except (json.JSONDecodeError, Exception) as e:
                 logger.error(f"Ошибка парсинга JSON ответа от LLM: {e}")
+                # Логируем начало и конец ответа для отладки
+                preview_start = response[:500].replace('\n', ' ')
+                preview_end = response[-500:].replace('\n', ' ')
+                logger.error(f"Raw response start: {preview_start}...")
+                logger.error(f"Raw response end: ...{preview_end}")
                 return self._get_default_evaluation()
             
             # Сохраняем оценку в БД
